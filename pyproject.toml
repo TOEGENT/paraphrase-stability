@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slm-answer-stability"
+version = "0.1.0"
+description = "Research scaffold for predicting answer stability under meaning-preserving question transformations"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "slm-answer-stability contributors" }
+]
+license = { file = "LICENSE" }
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

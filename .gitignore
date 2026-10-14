@@ -1,0 +1,63 @@
+# Python cache and build
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+.eggs/
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Secrets and local env
+.env
+.env.*
+*.pem
+*.key
+secrets/
+credentials/
+
+# Data artifacts (large/raw/intermediate)
+data/raw/
+data/interim/
+data/processed/
+*.parquet
+*.feather
+*.arrow
+*.h5
+*.npz
+
+# Model artifacts and checkpoints
+/models/
+checkpoints/
+weights/
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Results and temporary outputs
+results/tmp/
+results/cache/
+outputs/
+tmp/
+*.log
