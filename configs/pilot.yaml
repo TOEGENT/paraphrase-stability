@@ -1,0 +1,48 @@
+project:
+  name: slm-answer-stability
+  objective: >
+    Predict stability probability from one fixed-SLM question-answer pair:
+    P(meaning-equivalent transform keeps answer meaning).
+
+versions:
+  model_version_id: "UNSET_MODEL_VERSION_ID"
+  protocol_version_id: "UNSET_PROTOCOL_VERSION_ID"
+
+data:
+  raw_tasks_path: "UNSET_PATH"
+  transformed_tasks_path: "UNSET_PATH"
+  train_split_ratio: "UNSET"
+  val_split_ratio: "UNSET"
+  test_split_ratio: "UNSET"
+  split_group_key: task_id
+
+transforms:
+  enabled_types:
+    - lexical_substitution
+    - syntactic_reorder
+    - polite_rephrase
+    - concise_rewrite
+  max_variants_per_task: "UNSET"
+  generation_prompt_path: prompts/paraphrase_generator.md
+
+generation:
+  decoding: greedy
+  batch_size: "UNSET"
+  max_new_tokens: "UNSET"
+  temperature: 0.0
+
+annotation:
+  equivalence_prompt_path: prompts/answer_equivalence_judge.md
+  unresolved_policy: "manual_review_required"
+  unresolved_status_values: ["unclear", "insufficient_context"]
+
+modeling:
+  baseline_predictors:
+    - lexical_overlap
+    - embedding_cosine
+  mlp_hidden_sizes: "UNSET"
+  random_seed: "UNSET"
+
+evaluation:
+  primary_metrics: [mae, rmse, spearman]
+  calibration_bins: "UNSET"
