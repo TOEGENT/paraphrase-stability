@@ -1,0 +1,5 @@
+{"question_id":"question-000001","variant_id":"question-000001-v1","question_equivalence":"equivalent","answer_equivalence":"equivalent"}
+{"question_id":"question-000001","variant_id":"question-000001-v2","question_equivalence":"equivalent","answer_equivalence":"non_equivalent"}
+{"question_id":"question-000001","variant_id":"question-000001-v3","question_equivalence":"equivalent","answer_equivalence":"unclear"}
+{"question_id":"question-000002","variant_id":"question-000002-v1","question_equivalence":"non_equivalent","answer_equivalence":null}
+{"question_id":"question-000002","variant_id":"question-000002-v2","question_equivalence":"unclear","answer_equivalence":null}
