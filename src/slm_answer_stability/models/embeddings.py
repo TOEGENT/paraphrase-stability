@@ -9,7 +9,7 @@ import re
 import sys
 from pathlib import Path
 
-from slm_answer_stability.dataset_cli import WorkflowError, read_jsonl, required_text
+from slm_answer_stability.dataset_cli import WorkflowError, read_jsonl, required_text, write_jsonl
 from slm_answer_stability.dataset_prep import validate_final
 
 MODEL = "intfloat/multilingual-e5-base"
@@ -91,9 +91,22 @@ def encode_splits(split_dir: Path, output_dir: Path, revision: str | None, devic
             raise WorkflowError(f"{split}: non-finite embeddings")
         feature_file = output_dir / f"{split}.npz"
         np.savez_compressed(feature_file, question=question_vectors, answer=answer_vectors, question_id=np.asarray(ids, dtype=str))
+        lengths_file = output_dir / f"{split}_lengths.jsonl"
+        length_rows = [
+            {
+                "question_id": question_id,
+                "question_tokens": token_lengths[index],
+                "answer_tokens": token_lengths[len(rows) + index],
+                "question_truncated": token_lengths[index] > max_length,
+                "answer_truncated": token_lengths[len(rows) + index] > max_length,
+            }
+            for index, question_id in enumerate(ids)
+        ]
+        write_jsonl(lengths_file, length_rows)
         manifest["splits"][split] = {
             "rows": len(rows), "source_sha256": sha256(split_dir / f"{split}.jsonl"),
             "features_sha256": sha256(feature_file),
+            "lengths_sha256": sha256(lengths_file),
             "truncated_questions": sum(length > max_length for length in token_lengths[:len(rows)]),
             "truncated_answers": sum(length > max_length for length in token_lengths[len(rows):]),
         }
