@@ -1,0 +1,23 @@
+{
+  "base_url": "http://localhost:11434",
+  "timeout_seconds": 120,
+  "slm": {
+    "model": "llama3.1:8b",
+    "system": "Answer the question directly and briefly.",
+    "temperature": 0,
+    "seed": 42,
+    "num_predict": 128
+  },
+  "generator": {
+    "model": "llama3.1:8b",
+    "temperature": 0.7,
+    "seed": 42,
+    "num_predict": 1024
+  },
+  "judge": {
+    "model": "llama3.1:8b",
+    "temperature": 0,
+    "seed": 42,
+    "num_predict": 256
+  }
+}
