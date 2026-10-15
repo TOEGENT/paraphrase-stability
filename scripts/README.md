@@ -1,13 +1,17 @@
-# Scripts (planned)
+# Вызов моделей для подготовки датасета
 
-Ниже — предполагаемые команды запуска этапов (заглушки для будущей реализации):
+Первый работающий интерфейс — `slm_answer_stability.model_tools`. Он обращается к локальному [Ollama Chat API](https://github.com/ollama/ollama/blob/main/docs/api.md) через стандартную библиотеку Python и задаёт модели отдельно для трёх ролей: фиксированная SLM, генератор и оценщик. Пример настройки — [`configs/model_tools.example.json`](../configs/model_tools.example.json); замените имена моделей и настройки под ваш запуск. Для пробного запуска все три роли используют одну установленную модель, но в исследовательском датасете версии моделей и промптов следует фиксировать отдельно.
+
+Из корня репозитория после `pip install -e .`:
 
 ```bash
-python -m slm_answer_stability.data.prepare --config configs/pilot.yaml
-python -m slm_answer_stability.generation.run --config configs/pilot.yaml
-python -m slm_answer_stability.annotation.run --config configs/pilot.yaml
-python -m slm_answer_stability.models.train --config configs/pilot.yaml
-python -m slm_answer_stability.evaluation.run --config configs/pilot.yaml
+python -m slm_answer_stability.model_tools questions --topic "elementary arithmetic" --count 2
+python -m slm_answer_stability.model_tools paraphrases --question "What is 2+2?" --count 2
+python -m slm_answer_stability.model_tools answer --question "What is 2+2?"
+python -m slm_answer_stability.model_tools judge-question --question "What is 2+2?" --rewritten-question "What is two plus two?"
+python -m slm_answer_stability.model_tools judge-answer --question "What is 2+2?" --answer "4" --rewritten-answer "Four"
 ```
 
-Ожидаемый порядок: `data -> generation -> annotation -> models -> evaluation`.
+Каждая команда печатает один JSON-объект в stdout; ошибки идут в stderr и завершаются ненулевым кодом. `questions` создаёт **синтетические** исходные задачи, `paraphrases` — варианты существующего вопроса, `answer` вызывает фиксированную SLM, а две команды `judge-*` независимо проверяют смысл вопроса и ответа. Для иной конфигурации добавьте `--config путь/к/файлу.json` перед названием команды.
+
+Этот CLI — слой доступа к моделям. Его короткие запросы задают JSON-формат ответа CLI; файлы в `prompts/` задают формат JSONL будущего сборщика датасета и напрямую сюда не подставляются. CLI не собирает пять JSONL-файлов датасета, не принимает решения `unclear` за человека и не доказывает качество оценщика; эти действия остаются следующими этапами по [`docs/dataset_instructions.md`](../docs/dataset_instructions.md). На Windows с установленным Ollama проверьте доступные модели командой `ollama list`; нужные модели должны быть загружены до запуска CLI.
