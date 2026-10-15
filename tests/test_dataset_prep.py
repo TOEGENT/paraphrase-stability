@@ -21,12 +21,14 @@ class DatasetPrepTests(unittest.TestCase):
     def test_import_csv_generates_stable_ids_and_pending_review(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory) / "questions.csv"
-            source.write_text("question,topic\nWhat is two plus two?,math\nWhat is three plus three?,math\n", encoding="utf-8-sig")
+            source.write_text("question,topic,language\nWhat is two plus two?,math,en\nWhat is three plus three?,math,en\n", encoding="utf-8-sig")
             args = Namespace(input=source, delimiter=None, question_column="question", id_column=None, source="pilot")
             first = import_questions(args)
             self.assertEqual(first, import_questions(args))
             self.assertEqual(first[0]["question_review"], "pending")
             self.assertEqual(first[0]["source"], "pilot")
+            self.assertEqual(first[0]["topic"], "math")
+            self.assertEqual(first[0]["language"], "en")
             source.write_text("question\nSame?\n same? \n", encoding="utf-8")
             with self.assertRaisesRegex(WorkflowError, "duplicate question"):
                 import_questions(args)
