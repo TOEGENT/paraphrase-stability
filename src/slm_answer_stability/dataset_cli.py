@@ -86,33 +86,57 @@ def call_model(config: dict[str, Any], command: str, **kwargs: Any) -> dict[str,
 def generate_questions(args: argparse.Namespace, config: dict[str, Any]) -> list[dict[str, Any]]:
     existing = read_jsonl(args.existing) if args.existing else []
     seen = [required_text(row, "question", "existing question") for row in existing]
-    result = call_model(config, "questions", topic=args.topic, count=args.count)
+    seen_exact = {normalize(question): question for question in seen}
+    batch_size = getattr(args, "batch_size", 20)
+    duplicate_check = getattr(args, "duplicate_check", "exact")
     output = []
-    for item in result["questions"]:
-        question = item["question"].strip()
-        duplicate_status = "none"
-        duplicate_of = None
-        for prior in seen:
-            if normalize(question) == normalize(prior):
-                duplicate_status, duplicate_of = "exact", prior
-                break
-            decision = call_model(
-                config, "judge-question", question=prior, rewritten_question=question
-            )["status"]
-            if decision in ("equivalent", "unclear", "insufficient_context"):
-                duplicate_status, duplicate_of = decision, prior
-                break
-        output.append({
-            "question_id": "synthetic-" + uuid4().hex[:12],
-            "question": question,
-            "source": "synthetic",
-            "topic": args.topic,
-            "generator_model": result["model"],
-            "duplicate_status": duplicate_status,
-            "duplicate_of": duplicate_of,
-            "question_review": "pending",
-        })
-        seen.append(question)
+    while len(output) < args.count:
+        count = min(batch_size, args.count - len(output))
+        try:
+            result = call_model(
+                config, "questions", topic=args.topic, count=count, existing_questions=seen.copy()
+            )
+            if not isinstance(result.get("questions"), list) or len(result["questions"]) != count:
+                raise WorkflowError(f"Generator returned an incomplete batch: expected {count} questions")
+        except WorkflowError as exc:
+            recoverable = any(message in str(exc) for message in (
+                "generator returned invalid JSON",
+                "generator returned the wrong number of questions",
+                "Generator returned an incomplete batch",
+            ))
+            if not recoverable or count == 1:
+                raise
+            batch_size = max(1, count // 2)
+            if getattr(args, "progress", False):
+                print(f"Question batch of {count} failed ({exc}); retrying with {batch_size}", file=sys.stderr)
+            continue
+        for item in result["questions"]:
+            question = item["question"].strip()
+            exact_prior = seen_exact.get(normalize(question))
+            duplicate_status = "exact" if exact_prior else "unchecked" if duplicate_check == "exact" else "none"
+            duplicate_of = exact_prior
+            if not exact_prior and duplicate_check == "semantic":
+                for prior in seen:
+                    decision = call_model(
+                        config, "judge-question", question=prior, rewritten_question=question
+                    )["status"]
+                    if decision in ("equivalent", "unclear", "insufficient_context"):
+                        duplicate_status, duplicate_of = decision, prior
+                        break
+            output.append({
+                "question_id": "synthetic-" + uuid4().hex[:12],
+                "question": question,
+                "source": "synthetic",
+                "topic": args.topic,
+                "generator_model": result["model"],
+                "duplicate_status": duplicate_status,
+                "duplicate_of": duplicate_of,
+                "question_review": "pending",
+            })
+            seen.append(question)
+            seen_exact.setdefault(normalize(question), question)
+        if getattr(args, "progress", False):
+            print(f"Generated {len(output)}/{args.count} question candidates", file=sys.stderr)
     return output
 
 
@@ -134,6 +158,8 @@ def generate_paraphrases(args: argparse.Namespace, config: dict[str, Any]) -> li
                 "question_transformed": item["question"].strip(),
                 "transformation_type": item["transformation_type"],
                 "source": row.get("source", "unknown"),
+                "topic": row.get("topic"),
+                "language": row.get("language"),
                 "generator_model": result["model"],
                 "paraphrase_review": "pending",
             })
@@ -194,6 +220,8 @@ def generate_answers(args: argparse.Namespace, config: dict[str, Any]) -> list[d
             "answer_original": original_answers[question_id],
             "answer_transformed": transformed_answer,
             "source": row.get("source", "unknown"),
+            "topic": row.get("topic"),
+            "language": row.get("language"),
             "transformation_type": row.get("transformation_type"),
             "generator_model": row.get("generator_model"),
             "question_equivalence": row["question_equivalence"],
@@ -223,12 +251,17 @@ def compute_stability(args: argparse.Namespace, config: dict[str, Any] | None) -
                 "question": question,
                 "answer": original_answer,
                 "source": row.get("source", "unknown"),
+                "topic": row.get("topic"),
+                "language": row.get("language"),
                 "slm_model": row.get("slm_model"),
                 "variants": [],
                 "review_status": "pending",
             }
         group = output[question_id]
-        if group["question"] != question or group["answer"] != original_answer or group["slm_model"] != row.get("slm_model"):
+        if (group["question"] != question or group["answer"] != original_answer
+                or group["slm_model"] != row.get("slm_model")
+                or any(group[field] != row.get(field) for field in ("topic", "language"))
+                or group["source"] != row.get("source", "unknown")):
             raise WorkflowError(f"Conflicting original pair for {question_id}")
         status = row.get("answer_equivalence")
         rationale = row.get("answer_judge_rationale")
@@ -310,6 +343,8 @@ def main(command: str, argv: list[str] | None = None) -> int:
     if command == "generate_questions":
         parser.add_argument("--topic", required=True)
         parser.add_argument("--count", required=True, type=int)
+        parser.add_argument("--batch-size", type=int, default=20)
+        parser.add_argument("--duplicate-check", choices=("exact", "semantic"), default="exact")
         parser.add_argument("--existing", type=Path)
     elif command == "generate_paraphrases":
         parser.add_argument("--count", required=True, type=int)
@@ -317,7 +352,11 @@ def main(command: str, argv: list[str] | None = None) -> int:
         parser.add_argument("--recompute", action="store_true")
         parser.add_argument("--finalize", action="store_true")
     args = parser.parse_args(argv)
-    if command in ("generate_questions", "generate_paraphrases") and not 1 <= args.count <= 100:
+    if command == "generate_questions" and not 1 <= args.count <= 10000:
+        parser.error("--count must be between 1 and 10000")
+    if command == "generate_questions" and not 1 <= args.batch_size <= 100:
+        parser.error("--batch-size must be between 1 and 100")
+    if command == "generate_paraphrases" and not 1 <= args.count <= 100:
         parser.error("--count must be between 1 and 100")
     if command != "generate_questions" and args.input is None:
         parser.error("--input is required")
@@ -326,6 +365,7 @@ def main(command: str, argv: list[str] | None = None) -> int:
     try:
         config = None if command == "compute_stability" and args.recompute else load_config(args.config)
         if command == "generate_questions":
+            args.progress = True
             rows = generate_questions(args, config)
         elif command == "generate_paraphrases":
             rows = generate_paraphrases(args, config)
