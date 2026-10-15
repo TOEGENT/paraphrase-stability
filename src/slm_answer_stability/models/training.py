@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from slm_answer_stability.dataset_cli import WorkflowError
+from slm_answer_stability.dataset_cli import WorkflowError, write_jsonl
 from slm_answer_stability.models.embeddings import DIMENSION, SPLITS, load_splits, sha256
 from slm_answer_stability.models.mlp import build_model
 
@@ -226,15 +226,23 @@ def predict(split_dir: Path, features_dir: Path, model_dir: Path, output_dir: Pa
         "embedding_time_included": False,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
+    prediction_rows = [
+        {
+            "question_id": row["question_id"], "split": split,
+            "question": row["question"], "answer": row["answer"],
+            "k": row["k"], "N": row["N"], "target": row["target"],
+            "prediction": prediction,
+            "absolute_error": abs(prediction - row["target"]),
+            "constant_prediction": constant,
+        }
+        for row, prediction in zip(rows, predictions)
+    ]
+    write_jsonl(output_dir / "predictions.jsonl", prediction_rows)
     with (output_dir / "predictions.csv").open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(stream, fieldnames=["question_id", "k", "N", "target", "prediction", "absolute_error", "constant_prediction"])
         writer.writeheader()
-        for row, prediction in zip(rows, predictions):
-            writer.writerow({
-                "question_id": row["question_id"], "k": row["k"], "N": row["N"],
-                "target": row["target"], "prediction": prediction,
-                "absolute_error": abs(prediction - row["target"]), "constant_prediction": constant,
-            })
+        for row in prediction_rows:
+            writer.writerow({field: row[field] for field in writer.fieldnames})
     (output_dir / "metrics.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return report
 
