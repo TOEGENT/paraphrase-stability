@@ -41,14 +41,18 @@ def import_questions(args: argparse.Namespace) -> list[dict[str, Any]]:
                 )
                 if not question_id:
                     raise WorkflowError(f"CSV row {number}: empty question ID")
-                rows.append({
+                row = {
                     "question_id": question_id,
                     "question": question,
                     "source": args.source,
                     "duplicate_status": "unchecked",
                     "duplicate_of": None,
                     "question_review": "pending",
-                })
+                }
+                for field in ("topic", "language"):
+                    if item.get(field):
+                        row[field] = item[field].strip()
+                rows.append(row)
     except (OSError, UnicodeError, csv.Error) as exc:
         raise WorkflowError(f"Cannot import {args.input}: {exc}") from exc
     if not rows:
