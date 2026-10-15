@@ -25,6 +25,8 @@ def load_config(path: Path) -> dict[str, Any]:
         raise ModelToolError(f"Cannot read config {path}: {exc}") from exc
     if not isinstance(config, dict) or not isinstance(config.get("base_url"), str):
         raise ModelToolError("Config needs a string base_url")
+    if config.get("api_style", "ollama") not in ("ollama", "openai"):
+        raise ModelToolError("api_style must be ollama or openai")
     for role in ("slm", "generator", "judge"):
         value = config.get(role)
         if not isinstance(value, dict) or not isinstance(value.get("model"), str) or not value["model"].strip():
@@ -34,11 +36,7 @@ def load_config(path: Path) -> dict[str, Any]:
 
 def chat(config: dict[str, Any], role: str, system: str, user: str, *, structured: bool) -> str:
     settings = config[role]
-    options = {
-        "temperature": settings.get("temperature", 0.0),
-        "seed": settings.get("seed", 0),
-        "num_predict": settings.get("num_predict", 256),
-    }
+    api_style = config.get("api_style", "ollama")
     payload: dict[str, Any] = {
         "model": settings["model"],
         "messages": [
@@ -46,11 +44,25 @@ def chat(config: dict[str, Any], role: str, system: str, user: str, *, structure
             {"role": "user", "content": user},
         ],
         "stream": False,
-        "options": options,
     }
-    if structured:
-        payload["format"] = "json"
-    url = config["base_url"].rstrip("/") + "/api/chat"
+    if api_style == "ollama":
+        payload["options"] = {
+            "temperature": settings.get("temperature", 0.0),
+            "seed": settings.get("seed", 0),
+            "num_predict": settings.get("num_predict", 256),
+        }
+        if structured:
+            payload["format"] = "json"
+        url = config["base_url"].rstrip("/") + "/api/chat"
+    else:
+        payload.update({
+            "temperature": settings.get("temperature", 0.0),
+            "seed": settings.get("seed", 0),
+            "max_tokens": settings.get("num_predict", 256),
+        })
+        if structured:
+            payload["response_format"] = {"type": "json_object"}
+        url = config["base_url"].rstrip("/") + "/chat/completions"
     request = Request(
         url,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -65,7 +77,11 @@ def chat(config: dict[str, Any], role: str, system: str, user: str, *, structure
         raise ModelToolError(f"{role} request failed (HTTP {exc.code}): {detail}") from exc
     except (URLError, OSError, ValueError, json.JSONDecodeError) as exc:
         raise ModelToolError(f"{role} request failed at {url}: {exc}") from exc
-    message = result.get("message") if isinstance(result, dict) else None
+    if api_style == "ollama":
+        message = result.get("message") if isinstance(result, dict) else None
+    else:
+        choices = result.get("choices") if isinstance(result, dict) else None
+        message = choices[0].get("message") if isinstance(choices, list) and choices and isinstance(choices[0], dict) else None
     content = message.get("content") if isinstance(message, dict) else None
     if not isinstance(content, str) or not content.strip():
         raise ModelToolError(f"{role} returned no message content")
@@ -101,13 +117,24 @@ def run(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
         return {"answer": raw, "model": config["slm"]["model"]}
 
     if args.command == "questions":
+        existing_questions = getattr(args, "existing_questions", [])
+        if not isinstance(existing_questions, list) or any(
+            not isinstance(question, str) for question in existing_questions
+        ):
+            raise ModelToolError("existing_questions must be a list of question strings")
         raw = chat(
             config,
             "generator",
             "Create unambiguous questions that each require one short final answer. "
+            "Write questions in the same language as the topic. "
+            "For mathematical expressions, use explicit parentheses whenever operation order could be ambiguous. "
+            "Make the new questions distinct from the supplied existing questions, including their problem "
+            "types and solution patterns; changing only numbers or names is not enough. "
+            "Also vary the questions within the new batch. "
             "Return JSON with a questions array of objects containing question and topic. "
             "These are synthetic tasks; do not claim they came from a real dataset.",
-            f"Topic: {args.topic}\nNumber of questions: {args.count}",
+            f"Topic: {args.topic}\nNumber of questions: {args.count}\n"
+            f"Existing questions to avoid: {json.dumps(existing_questions, ensure_ascii=False)}",
             structured=True,
         )
         value = parse_object(raw, "generator")
