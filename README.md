@@ -40,3 +40,5 @@ Predicting semantic answer stability under meaning-preserving prompt transformat
 - `tests/` — место для будущих тестов.
 
 Контракты передачи данных между этапами описаны в [`docs/pipeline_contracts.md`](docs/pipeline_contracts.md). Сценарий для одного человека и ИИ-агента — в [`docs/daily_workflow.md`](docs/daily_workflow.md). Итоговый `test`-сплит используется после фиксации метода.
+
+Пошаговая сборка датасета с проверкой JSONL человеком описана в [`docs/dataset_cli.md`](docs/dataset_cli.md), а обучение MLP на полученных частях — в [`docs/mlp_pipeline.md`](docs/mlp_pipeline.md).
