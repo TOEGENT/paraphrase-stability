@@ -13,6 +13,9 @@ authors = [
 ]
 license = { file = "LICENSE" }
 
+[project.optional-dependencies]
+mlp = ["numpy>=1.26", "torch>=2.2", "sentence-transformers>=3.0"]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
