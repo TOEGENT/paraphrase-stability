@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from slm_answer_stability.dataset_cli import WorkflowError, write_jsonl
+from slm_answer_stability.dataset_cli import WorkflowError, read_jsonl, write_jsonl
 from slm_answer_stability.models.embeddings import DIMENSION, encode_splits, sha256
 from slm_answer_stability.models.training import load_features, predict, train
 
@@ -44,6 +44,7 @@ class MLPPipelineTests(unittest.TestCase):
             self.assertTrue(all(text.startswith("query: Original ") for text in encoded_texts))
             self.assertFalse(any("Secret" in text for text in encoded_texts))
             self.assertEqual(manifest["splits"]["train"]["rows"], 1)
+            self.assertEqual(read_jsonl(root / "features" / "train_lengths.jsonl")[0]["question_tokens"], 2)
 
     def test_train_predict_and_reject_changed_source(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -95,6 +96,10 @@ class MLPPipelineTests(unittest.TestCase):
             result = predict(splits, features, model_dir, root / "validation", "val", False, "cpu")
             self.assertEqual(result["questions"], 3)
             self.assertTrue(0 <= result["mlp"]["mae"] <= 1)
+            predictions = read_jsonl(root / "validation" / "predictions.jsonl")
+            self.assertEqual([row["question_id"] for row in predictions], [row["question_id"] for row in val_rows])
+            self.assertTrue(all(row["split"] == "val" and 0 <= row["prediction"] <= 1 for row in predictions))
+            self.assertEqual(predictions[0]["target"], val_rows[0]["target"])
             with self.assertRaisesRegex(WorkflowError, "--final"):
                 predict(splits, features, model_dir, root / "test_run", "test", False, "cpu")
             source = splits / "val.jsonl"
