@@ -66,7 +66,7 @@ uv run python scripts/generate_paraphrases.py --config configs/model_tools.opena
 ## 3. Получить ответы фиксированной SLM
 
 ```powershell
-uv run python scripts/generate_answers.py --config configs/model_tools.openai-local.json --input work/question_judgments_reviewed.jsonl --output work/answers.jsonl
+uv run python scripts/generate_answers.py --config configs/model_tools.openai-local.json --input work/paraphrases_reviewed.jsonl --output work/answers.jsonl
 ```
 
 Скрипт получает один исходный ответ на вопрос и ответы на его принятые перефразы; в строках сохраняются `answer_original`, `answer_transformed` и модель SLM. Проверьте, что ответы получены и пары относятся к нужным вопросам, прежде чем считать метку.
