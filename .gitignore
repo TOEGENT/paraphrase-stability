@@ -1,3 +1,5 @@
+work/
+
 # Python cache and build
 __pycache__/
 *.py[cod]
