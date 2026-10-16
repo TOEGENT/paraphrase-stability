@@ -458,31 +458,6 @@ def generate_paraphrases(args: argparse.Namespace, config: dict[str, Any]) -> li
     return output
 
 
-def evaluate_paraphrases(args: argparse.Namespace, config: dict[str, Any]) -> list[dict[str, Any]]:
-    variants = read_jsonl(args.input)
-    unique_ids(variants, "variant_id")
-    output = []
-    for row in variants:
-        variant_id = row["variant_id"]
-        if not reviewed(row, "paraphrase_review", variant_id):
-            continue
-        decision = call_model(
-            config,
-            "judge-question",
-            question=required_text(row, "question_original", variant_id),
-            rewritten_question=required_text(row, "question_transformed", variant_id),
-        )
-        output.append({
-            **row,
-            "question_equivalence": decision["status"],
-            "judge_status": decision["status"],
-            "judge_rationale": decision["rationale_short"],
-            "judge_model": decision["model"],
-            "equivalence_review": "pending",
-        })
-    return output
-
-
 def generate_answers(args: argparse.Namespace, config: dict[str, Any]) -> list[dict[str, Any]]:
     variants = read_jsonl(args.input)
     unique_ids(variants, "variant_id")
@@ -491,9 +466,7 @@ def generate_answers(args: argparse.Namespace, config: dict[str, Any]) -> list[d
     output = []
     for row in variants:
         variant_id = row["variant_id"]
-        if not reviewed(row, "equivalence_review", variant_id):
-            continue
-        if row.get("question_equivalence") != "equivalent":
+        if not reviewed(row, "paraphrase_review", variant_id):
             continue
         question_id = required_text(row, "question_id", variant_id)
         question = required_text(row, "question_original", variant_id)
@@ -519,9 +492,6 @@ def generate_answers(args: argparse.Namespace, config: dict[str, Any]) -> list[d
             "transformation_target": row.get("transformation_target"),
             "transformation_chain": row.get("transformation_chain"),
             "generator_model": row.get("generator_model"),
-            "question_equivalence": row["question_equivalence"],
-            "question_judge_status": row.get("judge_status"),
-            "question_judge_rationale": row.get("judge_rationale"),
             "slm_model": config["slm"]["model"],
         })
     return output
@@ -579,9 +549,6 @@ def compute_stability(args: argparse.Namespace, config: dict[str, Any] | None) -
             "transformation_mode": row.get("transformation_mode"),
             "transformation_target": row.get("transformation_target"),
             "transformation_chain": row.get("transformation_chain"),
-            "question_equivalence": row.get("question_equivalence"),
-            "question_judge_status": row.get("question_judge_status"),
-            "question_judge_rationale": row.get("question_judge_rationale"),
             "generator_model": row.get("generator_model"),
             "answer_equivalence": status,
             "answer_judge_rationale": rationale,
@@ -696,8 +663,6 @@ def main(command: str, argv: list[str] | None = None) -> int:
             args.run_id = uuid4().hex
             print(f"Paraphrase log: {args.log_file}", file=sys.stderr)
             rows = generate_paraphrases(args, config)
-        elif command == "evaluate_paraphrases":
-            rows = evaluate_paraphrases(args, config)
         elif command == "generate_answers":
             rows = generate_answers(args, config)
         elif command == "compute_stability":
