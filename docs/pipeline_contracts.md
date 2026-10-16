@@ -1,66 +1,36 @@
-# Контракты сквозного конвейера
+# Контракты скриптов
 
-Этот документ задаёт целевые интерфейсы этапов для [однодневной работы одного человека с ИИ-агентом](daily_workflow.md). Вызовы моделей описаны в `scripts/README.md`, файловые этапы датасета — в [dataset_cli.md](dataset_cli.md), а отдельный прогон MLP — в [mlp_pipeline.md](mlp_pipeline.md). Оркестратор полного исследования и заполнение `configs/pilot.yaml` остаются будущей работой.
+Здесь описаны реализованные файловые интерфейсы `scripts/*.py`. Команды запуска приведены в [dataset_cli.md](dataset_cli.md) и [mlp_pipeline.md](mlp_pipeline.md).
 
-## Источники инструкций и общие правила
+## Общие правила
 
-| Область | Источник в репозитории |
-|---|---|
-| Цель, метка устойчивости и последовательность этапов | `README.md` |
-| Схема входных данных и вычисление `k/N` | `data/README.md` |
-| Подготовка набора | `docs/dataset_instructions.md` |
-| Обучение MLP | `docs/MLP_dev_instructions.md` |
-| Оценка и формат отчёта | `docs/scripter_instructions.md` |
-| Черновик статьи | `docs/author_instructions.md`, `paper/outline.md` |
-| Рецензия | `docs/reviewer_instructions.md`, `reviews/template.md` |
-| Промпты для перефразирования и оценки смысла | `prompts/*.md` |
+- JSONL содержит по одному объекту UTF-8 на строку; пустой входной JSONL отклоняется.
+- `question_id` связывает вопрос с вариантами; `variant_id` идентифицирует вариант.
+- Выходные файлы и непустые выходные каталоги не перезаписываются. `generate_paraphrases.py` дополнительно дописывает журнал `--log-file`.
+- `pending` на очередной ручной проверке останавливает следующий этап; `rejected` исключает запись; `approved` пропускает её дальше.
+- Ниже указаны обязательные для работы поля. Необязательные `source`, `topic`, `language` и сведения о моделях и преобразованиях передаются дальше, когда присутствуют.
 
-Во всём конвейере идентификатор исходной задачи — `question_id` из `data/README.md`; если код оценки использует имя `task_id`, оно должно ссылаться на тот же идентификатор без создания новой группировки. Имена частей данных: `train`, `val`, `test`. Все записи одной исходной задачи и её перефразы остаются в одной части.
+## Создание датасета
 
-## Контракт запуска
+| Скрипт | Входные данные | Выходные данные |
+|---|---|---|
+| `import_questions.py` | `--input`: CSV/TSV с колонкой `question` (имя задаёт `--question-column`); необязательные колонка ID (`--id-column`), `topic`, `language`; `--source`. | `--output`: JSONL с `question_id`, `question`, `source`, `duplicate_status`, `duplicate_of`, `question_review: pending`; переносит `topic` и `language`, если они есть. |
+| `generate_questions.py` | `--topic`, `--count`, конфигурация генератора; необязательный `--existing`: JSONL с полем `question` для проверки повторов. | `--output`: JSONL с `question_id`, `question`, `source`, `topic`, `generator_model`, `duplicate_status`, `duplicate_of`, `question_review: pending`. |
+| `generate_paraphrases.py` | `--input`: JSONL с уникальными `question_id`, полями `question`, `question_review: approved/rejected`; `--count` новых вариантов на утверждённый вопрос, режим и конфигурация генератора; необязательный `--existing`: варианты с `variant_id`, `question_id`, `question_original`, `question_transformed`. | `--output`: только новые варианты в JSONL с `question_id`, `variant_id`, `question_original`, `question_transformed`, `transformation_type`, `transformation_mode`, `transformation_target`, `paraphrase_review: pending`; в режиме `combined` также `transformation_chain`; журнал событий через `--log-file`. |
+| `generate_answers.py` | `--input`: JSONL вариантов с уникальными `variant_id`, `paraphrase_review: approved/rejected`; утверждённым нужны `question_id`, `question_original`, `question_transformed`; конфигурация SLM. | `--output`: по строке на утверждённый вариант: `question_id`, `variant_id`, `question_original`, `question_transformed`, `answer_original`, `answer_transformed`, `slm_model` и метаданные. |
+| `compute_stability.py` | Обычно `--input`: JSONL ответов с `question_id`, уникальным `variant_id`, обоими вопросами и обоими ответами; конфигурация оценщика. С `--recompute`: сгруппированный JSONL с `question_id` и непустым `variants`, у каждого варианта `answer_equivalence`. | `--output`: JSONL по одной строке на `question_id`, с исходными `question`, `answer`, массивом `variants` (включая `answer_equivalence`), `k`, `N`, `unresolved`, `target`, `review_status: pending`; `target = null` при неясных оценках. `--recompute` пересчитывает числа без модели; `--finalize` оставляет только утверждённые строки с определённым `target`. |
+| `check_dataset.py` | `--input`: итоговый JSONL после `--finalize`; пороги `--min-questions`, `--min-variants-per-question`, `--min-total-variants`. | JSON-отчёт в stdout и, если задан `--report`, файл с `passed`, `questions`, `total_variants`, `problems`; при провале код возврата 1. |
+| `split_dataset.py` | `--input`: тот же итоговый JSONL; доли `--train`, `--val`, `--test` и `--seed`. | `--output-dir`: `train.jsonl`, `val.jsonl`, `test.jsonl` (исходные строки плюс `split`) и `split_manifest.json` с входным путём, seed, долями и числом строк. |
 
-Планируемый интерфейс оркестратора: одна команда с параметрами `--config`, `--mode` и `--output`; поддерживаемые режимы — `smoke` (демонстрационный проход), `validation` (ежедневная разработка) и `final` (оценка с замороженной моделью). Один агент проходит этапы последовательно, при необходимости запрашивая у человека решение по спорной разметке или выпуску. Точный модуль и синтаксис фиксируются при реализации, после чего пример команды добавляется сюда и в `scripts/README.md`.
+Итоговая строка для `check_dataset.py` и `split_dataset.py` содержит `question_id`, непустые `question` и `answer`, `review_status: approved`, непустой `variants`. Каждый вариант содержит уникальный `variant_id`, непустые `question` и `answer`, `answer_equivalence: equivalent/non_equivalent`. Проверяется `N = len(variants)`, `k = число equivalent`, `unresolved = 0`, `target = k/N`; для разделения нужны минимум три вопроса и положительные доли с суммой 1.
 
-На вход подаются версия конфигурации, разрешённый источник задач, настройки SLM и агента, идентификаторы текущего и прошлого MVP и каталог результатов. Запуск создаёт отдельный каталог `results/runs/<run_id>/` и не перезаписывает прошлые результаты. Каждый этап либо пишет свой выход и статус `complete`, либо сохраняет причину `failed` или `waiting_for_review`; зависимые этапы до разрешения проблемы не запускаются. Продолжение после ручного решения использует тот же `run_id`.
+## Обучение и анализ
 
-Обязательный `manifest.json` в каталоге запуска содержит `run_id`, `mvp_id`, `previous_mvp_id` (если есть), режим, время начала и завершения, версию кода и конфигурации, версии моделей и промптов, путь и контрольную сумму каждого входного и выходного файла, статус этапа, причину остановки и ссылки на ручные решения. Пути к артефактам текущего запуска задаются относительно его каталога; статья и самопроверка указывают текущий `mvp_id`.
+| Скрипт | Входные данные | Выходные данные |
+|---|---|---|
+| `build_embeddings.py` | `--splits-dir`: `train.jsonl`, `val.jsonl`, `test.jsonl` после `split_dataset.py`; использует исходные `question_id`, `question`, `answer` и проверяет всю итоговую запись; модель `intfloat/multilingual-e5-base`, необязательный `--revision`. | `--output-dir`: `{train,val,test}.npz` с `question`, `answer` (`float32`, `[n,768]`) и `question_id`; `{train,val,test}_lengths.jsonl` с длинами и признаками обрезания; `manifest.json` с моделью, revision и хешами. |
+| `train_mlp.py` | `--splits-dir`: `train.jsonl`, `val.jsonl`, `test.jsonl`, `split_manifest.json`; `--features-dir`: `train.npz`, `val.npz`, `manifest.json`; `--config`: JSON параметров MLP. | `--output-dir`: `model.pt` (веса), `model.json` (конфигурация, хеши входов, постоянный прогноз), `train_report.json` (история и метрики на `val`). |
+| `predict_mlp.py` | `--splits-dir`: `train.jsonl`, `val.jsonl`, `test.jsonl`, `split_manifest.json`; `--features-dir`: NPZ выбранной части и `manifest.json`; `--model-dir`: `model.pt`, `model.json`; для `test` требуется `--final`. | `--output-dir`: `predictions.jsonl` с `question_id`, `split`, `question`, `answer`, `k`, `N`, `target`, `prediction`, `absolute_error`, `constant_prediction`; `predictions.csv` с ID и числовыми полями; `metrics.json`. |
+| `analyze_predictions.py` | `--input`: `predictions.jsonl`; `--splits-dir`: `train.jsonl` и JSONL оцениваемой части; необязательный `--features-dir`: `manifest.json` и `{split}_lengths.jsonl`; для `test` требуется `--final`. | `--output-dir`: `analysis.json`, `group_metrics.csv`, `calibration.csv`, `top_errors.jsonl`, `report.md`. |
 
-## Реализованная передача для датасета
-
-| Скрипт | Вход | Выход | Ручная проверка перед следующим шагом |
-|---|---|---|---|
-| `generate_questions.py` | Тема, число вопросов, необязательный существующий JSONL | Кандидаты с `question_id`, `question`, `duplicate_status` | `question_review` |
-| `generate_paraphrases.py` | Утверждённые исходные вопросы | Перефразы с `variant_id` и типом преобразования | `paraphrase_review` |
-| `evaluate_paraphrases.py` | Утверждённые перефразы | `question_equivalence` и объяснение оценщика | `equivalence_review` и исправление ошибочного статуса |
-| `generate_answers.py` | Утверждённые эквивалентные перефразы | Исходный ответ и ответы на перефразы от фиксированной SLM | Следующий скрипт вызывается без ручного шага |
-| `compute_stability.py` | Ответы SLM | Сравнения смысла ответов, `k`, `N`, `target` | `review_status`; при правке статусов — повторный расчёт с `--recompute` |
-
-На любом переходе `pending` останавливает этап, `rejected` исключает запись, а исходный ответ не добавляется в `N`. Итоговый JSONL группирует варианты по `question_id`; разделение `train`/`val`/`test` выполняет `scripts/split_dataset.py`. Экспорт в пять файлов схемы `data/README.md` остаётся отдельной будущей работой.
-
-## Целевой конвейер исследования
-
-| Этап одного агента | Вход | Выход в каталоге запуска | Проверка передачи |
-|---|---|---|---|
-| Подготовка данных — разработчик датасета | Источник задач, `configs/pilot.yaml`, `prompts/paraphrase_generator.md` | `data/questions.jsonl`, `data/answers.jsonl`, `data/rephrased_questions.jsonl`, `data/rephrased_answers.jsonl`, журнал источников и настроек | Схема `data/README.md`, уникальные ID, сохранение исходных текстов, фиксированная SLM и greedy decoding |
-| Эквивалентность и метки — разработчик датасета | Четыре JSONL-файла, `prompts/answer_equivalence_judge.md`, решения ручной проверки | `data/equivalents.jsonl`, `data/splits.jsonl`, `data/targets.jsonl`, `review_queue.jsonl` | Нет потерянных ссылок или пересечений `question_id` между частями; `N > 0`, `0 ≤ k ≤ N`; неясные случаи не превращаются автоматически в 0 |
-| Обучение — разработчик MLP | Проверенные `targets.jsonl`, исходные пары, `train`/`val`, конфигурация признаков | `model/checkpoint`, `model/preprocessing`, `model/baselines.json`, `model/train_report.json` | Признаки MLP получают только исходный вопрос и ответ; обработка признаков и базовые методы обучены на `train`; выбор модели опирается на `val` |
-| Оценка — аналитик тестов | Замороженные модель и обработка, проверенные метки, часть `val` или `test` | `evaluation/metrics.json`, `evaluation/predictions.csv`, `evaluation/calibration.csv`, `evaluation/report.md` | Метрики считаются с равным весом задач; все числа воспроизводятся из прогнозов; `test` доступен только в режиме `final` после фиксации метода |
-| Статья | Манифест и проверенные результаты **текущего MVP**, протокол и источники | `paper/draft.md`, `paper/claim_sources.json` | Каждое числовое утверждение имеет ссылку на текущий MVP; неподтверждённые выводы помечены как гипотезы или пробелы |
-| Самопроверка по инструкции рецензента | Манифест, данные, модель, оценка и статья **текущего MVP** | `review/review.md`, `review/findings.json` | Замечания указывают проверяемое утверждение, ссылку на артефакт, серьёзность и предлагаемую проверку; это самопроверка агента, решение о выпуске принимает человек |
-
-Описанные здесь `splits.jsonl`, `targets.jsonl`, `claim_sources.json` и `findings.json` — предлагаемые новые выходы. Их минимальные поля фиксируются ниже; при реализации добавляются проверка схемы и маленький пример каждого файла. Изменение контракта этапа требует обновить следующий этап и зафиксировать новую версию в манифесте.
-
-| Файл | Минимальная запись |
-|---|---|
-| `data/splits.jsonl` | `question_id` (строка), `split` (`train`/`val`/`test`), `source` (строка) |
-| `data/targets.jsonl` | `question_id` (строка), `k` (целое), `N` (положительное целое), `target` (`k/N`), `split` |
-| `paper/claim_sources.json` | Список записей `claim_id`, `paper_location`, `claim_text`, `source_path`, `source_key`, `status` (`verified`/`hypothesis`/`missing`) |
-| `review/findings.json` | Список записей `finding_id`, `location`, `problem`, `evidence_path`, `impact`, `proposed_check`, `priority` (`blocking`/`major`/`editorial`) |
-
-`target` всегда пересчитывается из решений в `equivalents.jsonl`, а не принимается как независимый источник истины. Для числового вывода в статье `source_path` указывает на файл текущего MVP, а `source_key` — на конкретную метрику, строку или таблицу. Если источник отсутствует, ставится `status: missing`, и агент не формулирует такой вывод как полученный результат.
-
-## Передача и проверка в конце дня
-
-Один агент получает контракты, требования и замечания к предыдущей версии, выполняет этапы по порядку и оставляет артефакты текущего кандидата. Человек проверяет выходы, принимает или отклоняет выпуск и выбирает следующее изменение репозитория.
-
-Каждый ежедневный MVP включает манифест и проверенные артефакты всех выполненных этапов. Если агент не выполнил контракт, манифест фиксирует сбой и причину; человек либо принимает последнюю проверенную версию компонента с её идентификатором, либо оставляет предыдущий MVP последней готовой версией. Синтетические данные и заглушки допускаются только с явной маркировкой и не выдаются за научный результат.
+MLP использует в признаках только исходный вопрос и исходный ответ; варианты нужны для проверки метки и анализа групп.
