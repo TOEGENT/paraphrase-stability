@@ -1,0 +1,11 @@
+# One question structure per line, in generation order.
+Markdown table
+CSV
+JSON
+YAML
+XML
+numbered list
+bullet list
+key-value pairs
+HTML table
+plain-text form
