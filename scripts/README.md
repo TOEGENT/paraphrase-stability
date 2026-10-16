@@ -6,7 +6,7 @@
 uv sync
 ```
 
-Скрипты записывают UTF-8 JSONL и не перезаписывают существующие выходные файлы. В примерах используются пути `work/...`; для повторного прогона выбирайте новые имена файлов или каталогов. Суффикс `_reviewed` обозначает копию файла после ручной проверки: скрипты сами не утверждают записи. Сохраняйте `question_id` и `variant_id` при редактировании, поскольку они связывают этапы.
+Скрипты записывают UTF-8 JSONL и не перезаписывают существующие выходные файлы. В примерах используются пути `work/...`; для повторного прогона выбирайте новые имена файлов или каталогов. Статусы проверки человек выставляет в JSONL вручную; суффикс `_reviewed` в следующих этапах обозначает отдельную копию после проверки, а исходные вопросы проверяются прямо в `work/questions.jsonl`. Сохраняйте `question_id` и `variant_id` при редактировании, поскольку они связывают этапы.
 
 ## 1. Получить исходные вопросы
 
@@ -16,7 +16,7 @@ uv sync
 uv run python scripts/generate_questions.py --config configs/model_tools.openai-local.json --topic "Математика" --count 200 --batch-size 20 --duplicate-check exact --output work/questions.jsonl
 ```
 
-`--duplicate-check exact` отмечает буквальные повторы в новом файле и, если задан `--existing work/previous_questions.jsonl`, в существующем наборе. **Смысловые дубликаты на этом шаге проверяет человек**: скрипт пока не составляет список похожих пар, а для остальных записей ставит `duplicate_status: unchecked`. `exact` также является режимом по умолчанию; оценщик дубликатов не вызывается. Все новые записи имеют `question_review: pending`; проверьте однозначность, условия и дубликаты, затем в копии `work/questions_reviewed.jsonl` выставьте для каждой записи `approved` или `rejected`. Число утверждённых уникальных задач может оказаться меньше 200.
+`--duplicate-check exact` отмечает буквальные повторы в новом файле и, если задан `--existing work/previous_questions.jsonl`, в существующем наборе. **Смысловые дубликаты на этом шаге проверяет человек**: скрипт пока не составляет список похожих пар, а для остальных записей ставит `duplicate_status: unchecked`. `exact` также является режимом по умолчанию; оценщик дубликатов не вызывается. Все новые записи имеют `question_review: pending`: откройте сам `work/questions.jsonl`, проверьте однозначность, условия и дубликаты и замените `pending` на `approved` или `rejected` в каждой строке. Оставшийся `pending` остановит следующий этап; число утверждённых уникальных задач может оказаться меньше 200.
 
 В каждый запрос генератор получает все вопросы из `--existing` и из уже готовых партий текущего запуска; ему задано избегать повторения типов задач и замены только чисел. При `--batch-size 20` контекст обновляется раз в 20 вопросов, а `--batch-size 1` обновляет его перед каждым новым вопросом ценой 200 отдельных запросов. `work/questions.jsonl` создаётся после завершения генерации, поэтому для следующего запуска передайте этот файл через `--existing` и выберите новый путь `--output`. Контекст помогает разнообразию, но не гарантирует отсутствие смысловых дубликатов.
 
@@ -32,21 +32,38 @@ uv run python scripts/import_questions.py --input work/source.csv --question-col
 
 ## 2. Создать и проверить перефразы
 
-```powershell
-uv run python scripts/generate_paraphrases.py --config configs/model_tools.openai-local.json --input work/questions_reviewed.jsonl --count 3 --output work/paraphrases.jsonl
-```
-
-Скрипт обрабатывает только вопросы с `question_review: approved`. Проверьте каждый вариант, в частности сохранение чисел, ограничений и требуемого ответа; в копии `work/paraphrases_reviewed.jsonl` замените `paraphrase_review: pending` на `approved` или `rejected`. Параметр `--count 3` означает три кандидата на каждый утверждённый исходный вопрос.
-
-## 3. Оценить смысл перефразов и проверить оценки
+Для отдельных способов преобразования используйте `--mode`; `--count` задаёт число новых вариантов **на каждый** утверждённый вопрос, а цели перебираются по кругу. Доступные языки, структуры и стили задаются в `configs/paraphrase_languages.txt`, `configs/paraphrase_structures.txt` и `configs/paraphrase_styles.txt` — по одной цели на строку. Скрипт читает соответствующий файл автоматически. В режимах `translation`, `structure` и `style` запросы идут по одному варианту на цель, поэтому `--batch-size` к ним не применяется.
 
 ```powershell
-uv run python scripts/evaluate_paraphrases.py --config configs/model_tools.openai-local.json --input work/paraphrases_reviewed.jsonl --output work/question_judgments.jsonl
+uv run python scripts/generate_paraphrases.py --config configs/model_tools.openai-local.json --input work/questions.jsonl --mode translation --count 3 --output work/paraphrases_translation.jsonl
+uv run python scripts/generate_paraphrases.py --config configs/model_tools.openai-local.json --input work/questions.jsonl --mode structure --count 3 --output work/paraphrases_structure.jsonl
+uv run python scripts/generate_paraphrases.py --config configs/model_tools.openai-local.json --input work/questions.jsonl --mode style --count 3 --output work/paraphrases_style.jsonl
 ```
 
-Оценщик проверяет только перефразы с `paraphrase_review: approved` и записывает `question_equivalence`. В копии `work/question_judgments_reviewed.jsonl` проверьте его решение, при ошибке исправьте `question_equivalence` и выставьте `equivalence_review: approved` или `rejected`. На следующий шаг пройдут только утверждённые записи с `question_equivalence: equivalent`.
+Строки с `#` в файлах целей пропускаются; порядок строк определяет порядок генерации, после конца списка он повторяется. Если нужен другой набор только для одного запуска, его можно передать через `--targets`. В записи сохраняются `transformation_mode`, `transformation_target` и `transformation_type` вида `translation:English`; поле `language` по-прежнему обозначает язык исходного вопроса. При нескольких запусках передавайте предыдущие результаты через `--existing` и выбирайте новый `--output`, чтобы исключить повторы и сохранить уникальные `variant_id`. Перевод и структурное представление особенно важно проверить вручную: модель может изменить смысл или потерять условие.
 
-## 4. Получить ответы фиксированной SLM
+Каскадный режим применяет структуру, затем стиль к каждой структуре, затем перевод каждого стилевого варианта на каждый язык:
+
+```powershell
+uv run python scripts/generate_paraphrases.py --config configs/model_tools.openai-local.json --input work/questions.jsonl --mode combined --count 3 --output work/paraphrases_combined.jsonl
+```
+
+Здесь `--count 3` даёт `3 × 3 × 3 = 27` итоговых вариантов на исходный вопрос и 39 обращений к генератору без повторных попыток. Используются первые N строк каждого файла; для каждого этапа нужны как минимум N разных целей. Списки можно переопределить аргументами `--structures`, `--styles` и `--languages`. Итоговые строки содержат `transformation_chain` с текстом каждого промежуточного шага; промежуточные варианты не записываются как отдельные перефразы. Для защиты от случайного слишком большого запуска `--count` в этом режиме ограничен десятью. Поскольку ошибки могут накапливаться на трёх шагах, перед включением в датасет проверяйте и итоговый текст, и всю цепочку.
+
+Прежняя общая генерация доступна без `--mode`:
+
+```powershell
+uv run python scripts/generate_paraphrases.py --config configs/model_tools.openai-local.json --input work/questions.jsonl --count 30 --batch-size 5 --output work/paraphrases.jsonl
+```
+
+Скрипт обрабатывает только вопросы с `question_review: approved`; `--count 30` означает 30 **новых** кандидатов на каждый такой вопрос. Запросы идут партиями по пять: для каждого исходного вопроса генератор получает только его уже созданные перефразы, а история другого вопроса ему не передаётся. `--batch-size 1` обновляет контекст перед каждым новым перефразом ценой большего числа вызовов. Для продолжения после прежнего запуска укажите `--existing work/paraphrases_old.jsonl` и новый путь `--output`: предыдущие варианты попадут в контекст и их `variant_id` не повторятся, а выходной файл будет содержать только новые записи. Перед следующим этапом объедините старые и новые строки, если нужны оба набора. Скрипт отсеивает буквальные повторы исходного вопроса и уже созданных вариантов; похожие формулировки и сохранение условий требуют ручной проверки. В копии `work/paraphrases_reviewed.jsonl` замените `paraphrase_review: pending` на `approved` или `rejected`.
+
+Если модель вернёт повторы, меньше вариантов, чем запрошено, или отдельные записи без нужных полей, скрипт сохранит пригодные уникальные варианты и запросит недостающее число. Если модель вернёт **больше** вариантов, скрипт просмотрит их все и возьмёт нужное число новых: повтор в начале ответа не закроет путь к уникальным вариантам дальше. При некорректном JSON он повторит запрос с меньшей партией; после пяти подряд ответов без нового пригодного варианта остановится с ошибкой. Каждый запрос немедленно записывает в `work/paraphrases.log.jsonl` события `llm_request` с **полным API payload** (модель, оба сообщения, контекст предыдущих перефразов, temperature, seed и лимит токенов), `llm_response` с полным текстом ответа и причиной завершения, а затем `batch_result` с числами принятых, повторных и непригодных вариантов. События одного запроса связаны полем `request_id`, а разных запусков — `run_id`. В терминале путь к журналу показывается в начале запуска; другой путь можно задать через `--log-file`. Журнал дописывается и сохраняется после ошибки, итоговый `work/paraphrases.jsonl` появляется только после завершения всех вопросов.
+
+Последние события после отказа можно посмотреть командой `Get-Content work/paraphrases.log.jsonl -Tail 10`.
+
+
+## 3. Получить ответы фиксированной SLM
 
 ```powershell
 uv run python scripts/generate_answers.py --config configs/model_tools.openai-local.json --input work/question_judgments_reviewed.jsonl --output work/answers.jsonl
@@ -54,7 +71,7 @@ uv run python scripts/generate_answers.py --config configs/model_tools.openai-lo
 
 Скрипт получает один исходный ответ на вопрос и ответы на его принятые перефразы; в строках сохраняются `answer_original`, `answer_transformed` и модель SLM. Проверьте, что ответы получены и пары относятся к нужным вопросам, прежде чем считать метку.
 
-## 5. Сравнить смысл ответов и вычислить k/N
+## 4. Сравнить смысл ответов и вычислить k/N
 
 ```powershell
 uv run python scripts/compute_stability.py --config configs/model_tools.openai-local.json --input work/answers.jsonl --output work/dataset.jsonl
@@ -66,7 +83,7 @@ uv run python scripts/compute_stability.py --config configs/model_tools.openai-l
 uv run python scripts/compute_stability.py --recompute --finalize --input work/dataset_reviewed.jsonl --output work/dataset_final.jsonl
 ```
 
-## 6. Проверить набор и разделить его
+## 5. Проверить набор и разделить его
 
 Числа ниже служат примером: задайте минимумы и пропорции под свой эксперимент. Проверка вернёт ошибку, если требования не выполнены; для трёх непустых частей нужны как минимум три утверждённых вопроса.
 
