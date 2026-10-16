@@ -65,6 +65,94 @@ class ModelToolsTests(unittest.TestCase):
             with self.assertRaisesRegex(ModelToolError, "duplicate"):
                 run(Namespace(command="paraphrases", question="Кто?", count=1), CONFIG)
 
+    def test_paraphrase_request_includes_existing_variants(self):
+        value = {"variants": [{"question": "Кто это?", "transformation_type": "lexical"}]}
+        with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse({"message": {"content": json.dumps(value)}})) as request:
+            run(Namespace(command="paraphrases", question="Кто?", count=1,
+                          existing_paraphrases=["Кто именно?"]), CONFIG)
+        payload = json.loads(request.call_args.args[0].data)
+        self.assertIn("Кто именно?", payload["messages"][1]["content"])
+        self.assertIn("В коробке 12 красных шаров", payload["messages"][0]["content"])
+        self.assertIn("Вычислите 18 + (4 × 6)", payload["messages"][0]["content"])
+        self.assertIn("Какой город является столицей Италии", payload["messages"][0]["content"])
+
+    def test_translation_prompt_uses_target_language(self):
+        value = {"variants": [{"question": "Who is it?", "transformation_type": "translation"}]}
+        with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse({"message": {"content": json.dumps(value)}})) as request:
+            run(Namespace(command="paraphrases", question="Кто это?", count=1,
+                          mode="translation", target="English"), CONFIG)
+        payload = json.loads(request.call_args.args[0].data)
+        self.assertIn("Translate the entire question", payload["messages"][0]["content"])
+        self.assertIn("Target: English", payload["messages"][1]["content"])
+        self.assertNotIn("same language as the original", payload["messages"][0]["content"])
+
+    def test_structure_prompt_names_requested_format(self):
+        value = {"variants": [{"question": '{"request":"Who?"}',
+                               "transformation_type": "structure"}]}
+        with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse({"message": {"content": json.dumps(value)}})) as request:
+            run(Namespace(command="paraphrases", question="Кто?", count=1,
+                          mode="structure", target="JSON"), CONFIG)
+        payload = json.loads(request.call_args.args[0].data)
+        self.assertIn("Target: JSON", payload["messages"][1]["content"])
+        self.assertIn("explicit request for the answer", payload["messages"][0]["content"])
+
+    def test_combined_stage_keeps_structure_and_original_reference(self):
+        value = {"variants": [{"question": '{"request":"Who?"}',
+                               "transformation_type": "translation"}]}
+        with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse({"message": {"content": json.dumps(value)}})) as request:
+            run(Namespace(command="paraphrases", question='{"request":"Кто?"}', count=1,
+                          mode="translation", target="English", preserve_structure=True,
+                          reference_question="Кто?"), CONFIG)
+        payload = json.loads(request.call_args.args[0].data)
+        self.assertIn("Preserve the input's table, CSV, JSON", payload["messages"][0]["content"])
+        self.assertIn("Source question for checking facts only: Кто?",
+                      payload["messages"][1]["content"])
+
+    def test_paraphrase_trace_records_exact_request_and_raw_response(self):
+        value = {"variants": [{"question": "Кто это?", "transformation_type": "lexical"}]}
+        raw = json.dumps(value, ensure_ascii=False)
+        events = []
+        config = {**CONFIG, "generator": {"model": "generator", "temperature": 0.7, "seed": 42}}
+        with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse({"message": {"content": raw}})):
+            run(Namespace(command="paraphrases", question="Кто?", count=1,
+                          existing_paraphrases=["Кто именно?"], variation_attempt=2,
+                          model_trace=events.append), config)
+        self.assertEqual([event["event"] for event in events], ["request", "response"])
+        self.assertIn("Кто именно?", events[0]["payload"]["messages"][1]["content"])
+        self.assertIn("Variation attempt: 2", events[0]["payload"]["messages"][1]["content"])
+        self.assertIn("Change the sentence type or clause structure", events[0]["payload"]["messages"][1]["content"])
+        self.assertEqual(events[0]["payload"]["options"]["temperature"], 0.7)
+        self.assertEqual(events[0]["payload"]["options"]["seed"], 42)
+        self.assertEqual(events[1]["content"], raw)
+
+    def test_paraphrase_batch_can_return_duplicate_for_workflow_filtering(self):
+        value = {"variants": [{"question": "Кто?", "transformation_type": "lexical"}]}
+        with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse({"message": {"content": json.dumps(value)}})):
+            result = run(Namespace(command="paraphrases", question="Кто?", count=1,
+                                   allow_duplicates=True, variation_attempt=1), CONFIG)
+        self.assertEqual(result["variants"][0]["question"], "Кто?")
+
+    def test_paraphrase_batch_keeps_valid_items_from_incomplete_response(self):
+        value = {"variants": [
+            {"question": "Кто это?", "transformation_type": "lexical"},
+            {"question": "Пустой тип", "transformation_type": ""},
+        ]}
+        with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse({"message": {"content": json.dumps(value)}})):
+            result = run(Namespace(command="paraphrases", question="Кто?", count=3,
+                                   allow_partial=True, allow_duplicates=True), CONFIG)
+        self.assertEqual([row["question"] for row in result["variants"]], ["Кто это?"])
+
+    def test_paraphrase_batch_keeps_extra_variants_for_workflow_selection(self):
+        value = {"variants": [
+            {"question": "Кто?", "transformation_type": "lexical"},
+            {"question": "Кто это?", "transformation_type": "syntactic"},
+        ]}
+        with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse({"message": {"content": json.dumps(value)}})):
+            result = run(Namespace(command="paraphrases", question="Кто?", count=1,
+                                   allow_partial=True, allow_duplicates=True), CONFIG)
+        self.assertEqual(result["raw_variant_count"], 2)
+        self.assertEqual(len(result["variants"]), 2)
+
     def test_judge_answer_returns_status(self):
         value = {"status": "unclear", "rationale_short": "Контекста недостаточно"}
         with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse({"message": {"content": json.dumps(value)}})) as request:
