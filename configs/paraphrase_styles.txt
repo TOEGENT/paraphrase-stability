@@ -1,0 +1,11 @@
+# One speech style per line, in generation order.
+conversational
+literary
+scientific
+formal
+instructional
+concise
+journalistic
+academic
+technical
+child-friendly
