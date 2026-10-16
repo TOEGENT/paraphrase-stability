@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from argparse import Namespace
@@ -7,7 +8,6 @@ from unittest.mock import patch
 from slm_answer_stability.dataset_cli import (
     WorkflowError,
     compute_stability,
-    evaluate_paraphrases,
     finalize,
     generate_answers,
     generate_paraphrases,
@@ -114,22 +114,37 @@ class DatasetWorkflowTests(unittest.TestCase):
             variants[0]["paraphrase_review"] = "approved"
             variant_file = base / "variants.jsonl"
             write_jsonl(variant_file, variants)
-            with patch("slm_answer_stability.dataset_cli.call_model", return_value={
-                "status": "equivalent", "rationale_short": "Same question", "model": "judge"
-            }):
-                evaluated = evaluate_paraphrases(Namespace(input=variant_file), CONFIG)
-            self.assertEqual(evaluated[0]["equivalence_review"], "pending")
-            evaluated[0]["equivalence_review"] = "approved"
-            evaluated_file = base / "evaluated.jsonl"
-            write_jsonl(evaluated_file, evaluated)
             with patch("slm_answer_stability.dataset_cli.call_model", side_effect=[
                 {"answer": "4", "model": "fixed-slm"},
                 {"answer": "Four", "model": "fixed-slm"},
             ]):
-                answers = generate_answers(Namespace(input=evaluated_file), CONFIG)
+                answers = generate_answers(Namespace(input=variant_file), CONFIG)
             self.assertEqual(answers[0]["answer_original"], "4")
             self.assertEqual(answers[0]["answer_transformed"], "Four")
             self.assertEqual(answers[0]["language"], "en")
+            self.assertNotIn("question_equivalence", answers[0])
+
+    def test_answer_generation_requires_paraphrase_review(self):
+        with tempfile.TemporaryDirectory() as directory:
+            variants_file = Path(directory) / "variants.jsonl"
+            rows = [
+                {"question_id": "q1", "variant_id": "v1", "question_original": "2+2?",
+                 "question_transformed": "What is two plus two?", "paraphrase_review": "pending"},
+                {"question_id": "q1", "variant_id": "v2", "question_original": "2+2?",
+                 "question_transformed": "Two plus two?", "paraphrase_review": "rejected"},
+            ]
+            write_jsonl(variants_file, rows)
+            with self.assertRaisesRegex(WorkflowError, "paraphrase_review"):
+                generate_answers(Namespace(input=variants_file), CONFIG)
+            rows[0]["paraphrase_review"] = "approved"
+            variants_file.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=[
+                {"answer": "4"}, {"answer": "Four"},
+            ]) as model:
+                answers = generate_answers(Namespace(input=variants_file), CONFIG)
+            self.assertEqual(len(answers), 1)
+            self.assertEqual(answers[0]["variant_id"], "v1")
+            self.assertEqual(model.call_count, 2)
 
     def test_paraphrase_batches_use_only_same_question_history(self):
         with tempfile.TemporaryDirectory() as directory:
