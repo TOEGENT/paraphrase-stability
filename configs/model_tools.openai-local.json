@@ -1,7 +1,7 @@
 {
   "api_style": "openai",
   "base_url": "http://localhost:9090/v1",
-  "timeout_seconds": 180,
+  "timeout_seconds": 120,
   "slm": {
     "model": "qwen3.8-9b-q4",
     "system": "Answer the question directly and briefly.",
@@ -13,7 +13,7 @@
     "model": "qwen3.8-9b-q4",
     "temperature": 0.7,
     "seed": 42,
-    "num_predict": 4096
+    "num_predict": 1024
   },
   "judge": {
     "model": "qwen3.8-9b-q4",
