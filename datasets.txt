@@ -1,0 +1,7 @@
+1. GSM-Plus (ACL 2024)
+   https://github.com/qtli/GSM-Plus
+   Математические задачи GSM8K с перефразом (подмножество "problem understanding", 1 319 пар, 1 перефраз на задачу). Есть готовые ответы моделей (Llama-2-7B, Mistral-7B, MetaMath-7B и др.) с полями pred/gold/result. Лицензия CC-BY-SA-4.0.
+
+2. MathCheck-GSM (ICLR 2025)
+   https://github.com/PremiLab-Math/MathCheck
+   129 задач GSM8K, у каждой 1 перефраз с тем же ответом. Есть сырые ответы ~30 моделей (Llama-3/3.1-8B, Qwen1.5-7B, Yi-6B и др.), ответ нужно извлекать из текста. Лицензия не указана.
