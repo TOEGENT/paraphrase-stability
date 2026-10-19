@@ -20,7 +20,7 @@
 | answers.jsonl | Исходные ответы SLM |
 | rephrased_questions.jsonl | Перефразы вопросов |
 | rephrased_answers.jsonl | Ответы на перефразы |
-| equivalents.jsonl | Эквивалентность вопросов и ответов |
+| equivalents.jsonl | Эквивалентность ответов на принятые перефразы |
 
 ## 1. questions.jsonl
 
@@ -85,8 +85,6 @@
 
 - `question_id` — ссылка на исходный вопрос.
 - `variant_id` — ссылка на перефраз.
-- `question_equivalence` — сохраняет ли перефраз смысл,
-  информацию и требования исходного вопроса.
 - `answer_equivalence` — сохраняет ли ответ на перефраз
   смысл исходного ответа.
 
@@ -99,15 +97,10 @@
 | unclear | Решение неуверенное; нужна дополнительная проверка |
 | insufficient_context | Недостаточно контекста для сравнения |
 
-Если question_equivalence не равен equivalent,
-answer_equivalence устанавливается в null.
-
 ```jsonl
-{"question_id":"question-000001","variant_id":"question-000001-v1","question_equivalence":"equivalent","answer_equivalence":"equivalent"}
-{"question_id":"question-000001","variant_id":"question-000001-v2","question_equivalence":"equivalent","answer_equivalence":"non_equivalent"}
-{"question_id":"question-000001","variant_id":"question-000001-v3","question_equivalence":"equivalent","answer_equivalence":"unclear"}
-{"question_id":"question-000001","variant_id":"question-000001-v4","question_equivalence":"non_equivalent","answer_equivalence":null}
-{"question_id":"question-000001","variant_id":"question-000001-v5","question_equivalence":"insufficient_context","answer_equivalence":null}
+{"question_id":"question-000001","variant_id":"question-000001-v1","answer_equivalence":"equivalent"}
+{"question_id":"question-000001","variant_id":"question-000001-v2","answer_equivalence":"non_equivalent"}
+{"question_id":"question-000001","variant_id":"question-000001-v3","answer_equivalence":"unclear"}
 ```
 
 Эквивалентность ответов оценивается в контексте исходной задачи.
@@ -132,17 +125,15 @@ answer_equivalence устанавливается в null.
 
 Для исходной пары «вопрос–ответ»:
 
-- N — число вариантов с question_equivalence = equivalent
-  и окончательной меткой answer_equivalence:
-  equivalent или non_equivalent.
+- N — число вручную принятых перефразов с ответами.
 - k — число таких вариантов с answer_equivalence = equivalent.
 - target = k / N.
 
 Исходный ответ не включается в N.
 
-Неэквивалентные вопросы исключаются.
-Статусы unclear и insufficient_context требуют разрешения
-и не считаются автоматически non_equivalent.
+Отклонённые при ручной проверке перефразы исключаются.
+Статусы unclear и insufficient_context требуют разрешения:
+до него `target` остаётся `null`, а `N` включает эти варианты.
 
 Для готовой метки необходимо N > 0.
 Если проверок нет, метка не определена, а не равна нулю.

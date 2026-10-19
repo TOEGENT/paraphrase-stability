@@ -1,0 +1,12 @@
+{
+  "hidden_dim": 64,
+  "dropout": 0.1,
+  "learning_rate": 0.001,
+  "weight_decay": 0.01,
+  "batch_size": 32,
+  "max_epochs": 200,
+  "patience": 20,
+  "seed": 42,
+  "loss_weighting": "equal",
+  "max_n_weight": null
+}

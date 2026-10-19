@@ -12,6 +12,11 @@ authors = [
   { name = "slm-answer-stability contributors" }
 ]
 license = { file = "LICENSE" }
+dependencies = [
+  "numpy>=1.26",
+  "torch>=2.2",
+  "sentence-transformers>=3.0",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -1,0 +1,11 @@
+# One target language per line, in generation order.
+English
+German
+French
+Spanish
+Italian
+Portuguese
+Chinese
+Japanese
+Arabic
+Hindi
