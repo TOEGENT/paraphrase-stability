@@ -1,7 +1,19 @@
-1. GSM-Plus (ACL 2024)
-   https://github.com/qtli/GSM-Plus
-   Математические задачи GSM8K с перефразом (подмножество "problem understanding", 1 319 пар, 1 перефраз на задачу). Есть готовые ответы моделей (Llama-2-7B, Mistral-7B, MetaMath-7B и др.) с полями pred/gold/result. Лицензия CC-BY-SA-4.0.
+1. DefAn (журнал Information, MDPI, 2025)
+   https://github.com/ashikiut/DefAn
+   Около 4 500 фактологических вопросов в 8 доменах, по 15 вариантов формулировки на вопрос (ChatGPT + проверка экспертами). Короткие ответы (дата, число, имя, место). Нет id вопроса - группы восстанавливаются по порядку строк. Лицензия MIT.
 
-2. MathCheck-GSM (ICLR 2025)
-   https://github.com/PremiLab-Math/MathCheck
-   129 задач GSM8K, у каждой 1 перефраз с тем же ответом. Есть сырые ответы ~30 моделей (Llama-3/3.1-8B, Qwen1.5-7B, Yi-6B и др.), ответ нужно извлекать из текста. Лицензия не указана.
+2. PopQA-TP (GEM Workshop @ EMNLP 2023)
+   https://huggingface.co/datasets/ibm-research/popqa-tp
+   5 518 фактологических вопросов ровно с 10 перефразами (отношения producer, director, screenwriter), ответ - список алиасов одной сущности. Перефразы шаблонные: внутри отношения одни и те же 10 формулировок с подставленным объектом. Лицензия MIT.
+
+3. ParaMAWPS (ACL 2023 Student Research Workshop)
+   https://github.com/Starscream-11813/Variational-Mathematical-Reasoning
+   Математические задачи MAWPS; у 195 задач 10-17 вариантов с тем же ответом (GPT-3/3.5 + проверка людьми). Среди вариантов есть добавленные отвлекающие условия - нужно фильтровать. Лицензия неясна (CC BY-NC-SA 4.0 или MIT).
+
+4. MetaMathQA (ICLR 2024)
+   https://huggingface.co/datasets/meta-math/MetaMathQA
+   Переформулировки задач GSM8K от GPT-3.5, в среднем около 10 на задачу (оценка, не пересчитано). Проверка только тем, что GPT-3.5 получает тот же ответ, людьми не проверялось. Задачи из train-сплита GSM8K. Лицензия MIT.
+
+5. Paralex test set (ACL 2013)
+   http://knowitall.cs.washington.edu/paralex/
+   37 вручную очищенных кластеров, 698 вопросов (около 19 перефразов на кластер) с эталонными ответами. Ответ может быть набором сущностей. Лицензия не проверена.
