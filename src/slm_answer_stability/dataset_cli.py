@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
-from datetime import datetime, timezone
+from collections import Counter
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from time import monotonic
 from typing import Any
 from uuid import uuid4
 
@@ -461,43 +464,99 @@ def generate_paraphrases(args: argparse.Namespace, config: dict[str, Any]) -> li
 def generate_answers(args: argparse.Namespace, config: dict[str, Any]) -> list[dict[str, Any]]:
     variants = read_jsonl(args.input)
     unique_ids(variants, "variant_id")
+    output_path = getattr(args, "output", None)
+    if output_path is not None and output_path.exists():
+        raise WorkflowError(f"Output already exists: {output_path}; choose a new file")
+    total = sum(row.get("paraphrase_review") == "approved" for row in variants)
     original_answers: dict[str, str] = {}
     original_questions: dict[str, str] = {}
     output = []
-    for row in variants:
+    output_file = None
+    started_at = monotonic()
+    try:
+        for row in variants:
+            variant_id = row["variant_id"]
+            if not reviewed(row, "paraphrase_review", variant_id):
+                continue
+            question_id = required_text(row, "question_id", variant_id)
+            question = required_text(row, "question_original", variant_id)
+            transformed = required_text(row, "question_transformed", variant_id)
+            if question_id in original_questions and original_questions[question_id] != question:
+                raise WorkflowError(f"Conflicting original question for {question_id}")
+            original_questions[question_id] = question
+            if question_id not in original_answers:
+                original_answers[question_id] = call_model(config, "answer", question=question)["answer"]
+            transformed_answer = call_model(config, "answer", question=transformed)["answer"]
+            answer_row = {
+                "question_id": question_id,
+                "variant_id": variant_id,
+                "question_original": question,
+                "question_transformed": transformed,
+                "answer_original": original_answers[question_id],
+                "answer_transformed": transformed_answer,
+                "source": row.get("source", "unknown"),
+                "topic": row.get("topic"),
+                "language": row.get("language"),
+                "transformation_type": row.get("transformation_type"),
+                "transformation_mode": row.get("transformation_mode"),
+                "transformation_target": row.get("transformation_target"),
+                "transformation_chain": row.get("transformation_chain"),
+                "generator_model": row.get("generator_model"),
+                "slm_model": config["slm"]["model"],
+            }
+            if output_path is not None:
+                if output_file is None:
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    output_file = output_path.open("x", encoding="utf-8")
+                output_file.write(json.dumps(answer_row, ensure_ascii=False) + "\n")
+                output_file.flush()
+            output.append(answer_row)
+            if getattr(args, "progress", False):
+                filled = 20 * len(output) // total
+                elapsed = max(0, monotonic() - started_at)
+                remaining = elapsed / len(output) * (total - len(output))
+                print(
+                    f"Answers [{('#' * filled).ljust(20, '-')}] {len(output)}/{total} "
+                    f"elapsed {timedelta(seconds=round(elapsed))} "
+                    f"remaining ~{timedelta(seconds=round(remaining))}",
+                    file=sys.stderr,
+                )
+    except OSError as exc:
+        raise WorkflowError(f"Cannot write {output_path}: {exc}") from exc
+    finally:
+        if output_file is not None:
+            output_file.close()
+    if output_path is not None and not output:
+        raise WorkflowError("No records to write")
+    return output
+
+
+def generate_answer_equivalence_ai(args: argparse.Namespace, config: dict[str, Any]) -> list[dict[str, Any]]:
+    rows = read_jsonl(args.input)
+    unique_ids(rows, "variant_id")
+    output = []
+    for row in rows:
         variant_id = row["variant_id"]
-        if not reviewed(row, "paraphrase_review", variant_id):
-            continue
-        question_id = required_text(row, "question_id", variant_id)
         question = required_text(row, "question_original", variant_id)
-        transformed = required_text(row, "question_transformed", variant_id)
-        if question_id in original_questions and original_questions[question_id] != question:
-            raise WorkflowError(f"Conflicting original question for {question_id}")
-        original_questions[question_id] = question
-        if question_id not in original_answers:
-            original_answers[question_id] = call_model(config, "answer", question=question)["answer"]
-        transformed_answer = call_model(config, "answer", question=transformed)["answer"]
+        original_answer = required_text(row, "answer_original", variant_id)
+        required_text(row, "question_transformed", variant_id)
+        transformed_answer = required_text(row, "answer_transformed", variant_id)
+        if "answer_equivalence" in row:
+            raise WorkflowError(f"{variant_id}: answer_equivalence already exists")
+        decision = call_model(
+            config, "judge-answer", question=question,
+            answer=original_answer, rewritten_answer=transformed_answer,
+        )
         output.append({
-            "question_id": question_id,
-            "variant_id": variant_id,
-            "question_original": question,
-            "question_transformed": transformed,
-            "answer_original": original_answers[question_id],
-            "answer_transformed": transformed_answer,
-            "source": row.get("source", "unknown"),
-            "topic": row.get("topic"),
-            "language": row.get("language"),
-            "transformation_type": row.get("transformation_type"),
-            "transformation_mode": row.get("transformation_mode"),
-            "transformation_target": row.get("transformation_target"),
-            "transformation_chain": row.get("transformation_chain"),
-            "generator_model": row.get("generator_model"),
-            "slm_model": config["slm"]["model"],
+            **row,
+            "answer_equivalence": decision["status"],
+            "answer_judge_rationale": decision["rationale_short"],
+            "answer_judge_model": config["judge"]["model"],
         })
     return output
 
 
-def compute_stability(args: argparse.Namespace, config: dict[str, Any] | None) -> list[dict[str, Any]]:
+def compute_k_n(args: argparse.Namespace) -> list[dict[str, Any]]:
     rows = read_jsonl(args.input)
     output: dict[str, dict[str, Any]] = {}
     seen_variants: set[str] = set()
@@ -529,18 +588,8 @@ def compute_stability(args: argparse.Namespace, config: dict[str, Any] | None) -
                 or group["source"] != row.get("source", "unknown")):
             raise WorkflowError(f"Conflicting original pair for {question_id}")
         status = row.get("answer_equivalence")
-        rationale = row.get("answer_judge_rationale")
         if status not in ("equivalent", "non_equivalent", "unclear", "insufficient_context"):
-            if config is None:
-                raise WorkflowError(f"{variant_id}: missing answer_equivalence for --recompute")
-            decision = call_model(
-                config,
-                "judge-answer",
-                question=question,
-                answer=original_answer,
-                rewritten_answer=transformed_answer,
-            )
-            status, rationale = decision["status"], decision["rationale_short"]
+            raise WorkflowError(f"{variant_id}: missing or invalid answer_equivalence")
         group["variants"].append({
             "variant_id": variant_id,
             "question": required_text(row, "question_transformed", variant_id),
@@ -551,8 +600,8 @@ def compute_stability(args: argparse.Namespace, config: dict[str, Any] | None) -
             "transformation_chain": row.get("transformation_chain"),
             "generator_model": row.get("generator_model"),
             "answer_equivalence": status,
-            "answer_judge_rationale": rationale,
-            "answer_judge_model": config["judge"]["model"] if config else row.get("answer_judge_model"),
+            "answer_judge_rationale": row.get("answer_judge_rationale"),
+            "answer_judge_model": row.get("answer_judge_model"),
         })
     results = []
     for group in output.values():
@@ -563,6 +612,166 @@ def compute_stability(args: argparse.Namespace, config: dict[str, Any] | None) -
         group.update({"k": k, "N": n, "target": None if unresolved else k / n, "unresolved": unresolved})
         results.append(group)
     return results
+
+
+def _anchor_splits(group_ids: set[str], splits_dir: Path | None, seed: int,
+                   ratios: tuple[float, float, float]) -> dict[str, str]:
+    if splits_dir is not None:
+        splits: dict[str, str] = {}
+        for split in ("train", "val", "test"):
+            for row in read_jsonl(splits_dir / f"{split}.jsonl"):
+                source_id = required_text(row, "question_id", split)
+                if source_id in splits:
+                    raise WorkflowError(f"{source_id}: appears in multiple splits")
+                splits[source_id] = split
+        if set(splits) != group_ids:
+            raise WorkflowError("split groups differ from answer anchors")
+        return splits
+    if len(group_ids) < 3:
+        raise WorkflowError("At least three source questions are required for three splits")
+    if any(not 0 < ratio < 1 for ratio in ratios) or abs(sum(ratios) - 1) > 1e-9:
+        raise WorkflowError("Split ratios must be positive fractions summing to 1")
+    shuffled = sorted(group_ids)
+    random.Random(seed).shuffle(shuffled)
+    remainder = len(shuffled) - 3
+    quotas = [remainder * ratio for ratio in ratios]
+    counts = [1 + int(quota) for quota in quotas]
+    for index in sorted(range(3), key=lambda i: (quotas[i] % 1, -i), reverse=True)[:remainder - sum(map(int, quotas))]:
+        counts[index] += 1
+    splits = {}
+    offset = 0
+    for split, count in zip(("train", "val", "test"), counts):
+        splits.update({source_id: split for source_id in shuffled[offset:offset + count]})
+        offset += count
+    return splits
+
+
+def compute_all_anchors(answers_path: Path, splits_dir: Path | None = None, seed: int = 42,
+                        ratios: tuple[float, float, float] = (0.8, 0.1, 0.1)) -> list[dict[str, Any]]:
+    """Reanchor each equation answer and count equal final x values among the others."""
+    input_rows = read_jsonl(answers_path)
+    if "comparisons" in input_rows[0]:
+        return _compute_verified_anchors(input_rows, splits_dir, seed, ratios)
+    try:
+        from scripts.equivalence_generation import extract_final_x
+    except ModuleNotFoundError:  # Direct execution puts scripts/ on sys.path.
+        from equivalence_generation import extract_final_x
+    groups: dict[str, dict[str, Any]] = {}
+    seen_variants: set[str] = set()
+    for row in input_rows:
+        variant_id = required_text(row, "variant_id", "answer row")
+        if variant_id in seen_variants:
+            raise WorkflowError(f"duplicate variant_id: {variant_id}")
+        seen_variants.add(variant_id)
+        question_id = required_text(row, "question_id", variant_id)
+        original_question = required_text(row, "question_original", variant_id)
+        original_answer = required_text(row, "answer_original", variant_id)
+        transformed_question = required_text(row, "question_transformed", variant_id)
+        transformed_answer = required_text(row, "answer_transformed", variant_id)
+        original_x = extract_final_x(original_answer)
+        transformed_x = extract_final_x(transformed_answer)
+        if original_x is None or transformed_x is None:
+            raise WorkflowError(f"{variant_id}: answer has no unambiguous final x")
+        expected = "equivalent" if original_x == transformed_x else "non_equivalent"
+        if "answer_equivalence" in row and row["answer_equivalence"] != expected:
+            raise WorkflowError(f"{variant_id}: answer_equivalence disagrees with extracted x")
+        metadata = {key: row.get(key) for key in ("source", "topic", "language", "slm_model")}
+        group = groups.get(question_id)
+        if group is None:
+            group = {"question": original_question, "answer": original_answer,
+                     "x": original_x, "metadata": metadata, "anchors": []}
+            groups[question_id] = group
+        elif (group["question"] != original_question or group["answer"] != original_answer
+              or group["metadata"] != metadata):
+            raise WorkflowError(f"{question_id}: conflicting original question, answer, or metadata")
+        group["anchors"].append((variant_id, transformed_question, transformed_answer, transformed_x))
+
+    splits = _anchor_splits(set(groups), splits_dir, seed, ratios)
+
+    output: list[dict[str, Any]] = []
+    for source_question_id, group in groups.items():
+        anchors = [("original", group["question"], group["answer"], group["x"]),
+                   *group["anchors"]]
+        counts = Counter(x for _, _, _, x in anchors)
+        n = len(anchors) - 1
+        for anchor_id, question, answer, x in anchors:
+            k = counts[x] - 1
+            output.append({
+                "question_id": f"{source_question_id}::anchor::{anchor_id}",
+                "source_question_id": source_question_id,
+                "anchor_id": anchor_id,
+                "question": question,
+                "answer": answer,
+                "extracted_x": str(x),
+                "k": k,
+                "N": n,
+                "target": k / n,
+                "split": splits[source_question_id],
+                **group["metadata"],
+            })
+    return output
+
+
+def _compute_verified_anchors(rows: list[dict[str, Any]], splits_dir: Path | None, seed: int,
+                              ratios: tuple[float, float, float]) -> list[dict[str, Any]]:
+    """Sum explicit pairwise statuses produced by equivalence_generation.py."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    seen_ids: set[str] = set()
+    for row in rows:
+        anchor_id = required_text(row, "question_id", "anchor row")
+        source_id = required_text(row, "source_question_id", anchor_id)
+        required_text(row, "anchor_id", anchor_id)
+        required_text(row, "question", anchor_id)
+        required_text(row, "answer", anchor_id)
+        required_text(row, "extracted_x", anchor_id)
+        if anchor_id in seen_ids:
+            raise WorkflowError(f"{anchor_id}: duplicate question_id")
+        seen_ids.add(anchor_id)
+        if not isinstance(row.get("comparisons"), list):
+            raise WorkflowError(f"{anchor_id}: missing comparisons")
+        groups.setdefault(source_id, []).append(row)
+
+    splits = _anchor_splits(set(groups), splits_dir, seed, ratios)
+
+    output: list[dict[str, Any]] = []
+    for source_id, anchors in groups.items():
+        ids = {row["anchor_id"] for row in anchors}
+        if len(ids) != len(anchors) or "original" not in ids:
+            raise WorkflowError(f"{source_id}: missing or duplicate anchor")
+        extracted = {row["anchor_id"]: row["extracted_x"] for row in anchors}
+        for row in anchors:
+            comparisons = row["comparisons"]
+            other_ids: set[str] = set()
+            k = 0
+            for comparison in comparisons:
+                if not isinstance(comparison, dict):
+                    raise WorkflowError(f"{row['question_id']}: invalid comparison")
+                other_id = required_text(comparison, "other_anchor_id", row["question_id"])
+                if other_id == row["anchor_id"] or other_id not in ids or other_id in other_ids:
+                    raise WorkflowError(f"{row['question_id']}: invalid comparison target")
+                other_ids.add(other_id)
+                status = comparison.get("answer_equivalence")
+                expected = "equivalent" if row["extracted_x"] == extracted[other_id] else "non_equivalent"
+                if status != expected:
+                    raise WorkflowError(f"{row['question_id']}: comparison disagrees with extracted x")
+                k += status == "equivalent"
+            if other_ids != ids - {row["anchor_id"]}:
+                raise WorkflowError(f"{row['question_id']}: incomplete comparisons")
+            n = len(comparisons)
+            output.append({
+                "question_id": row["question_id"],
+                "source_question_id": source_id,
+                "anchor_id": row["anchor_id"],
+                "question": row["question"],
+                "answer": row["answer"],
+                "extracted_x": row["extracted_x"],
+                "k": k,
+                "N": n,
+                "target": k / n,
+                "split": splits[source_id],
+                **{key: row.get(key) for key in ("source", "topic", "language", "slm_model")},
+            })
+    return output
 
 
 def recompute(args: argparse.Namespace) -> list[dict[str, Any]]:
@@ -602,7 +811,8 @@ def finalize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def main(command: str, argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=Path("configs/model_tools.example.json"))
+    if command != "compute_k_n":
+        parser.add_argument("--config", type=Path, default=Path("configs/model_tools.example.json"))
     parser.add_argument("--input", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     if command == "generate_questions":
@@ -621,9 +831,16 @@ def main(command: str, argv: list[str] | None = None) -> int:
         parser.add_argument("--languages", nargs="+")
         parser.add_argument("--existing", type=Path)
         parser.add_argument("--log-file", type=Path)
-    elif command == "compute_stability":
+    elif command == "compute_k_n":
         parser.add_argument("--recompute", action="store_true")
         parser.add_argument("--finalize", action="store_true")
+        parser.add_argument("--original-only", action="store_true",
+                            help="Compute one grouped k/N for each original question")
+        parser.add_argument("--splits-dir", type=Path)
+        parser.add_argument("--seed", type=int, default=42)
+        parser.add_argument("--train", type=float, default=0.8)
+        parser.add_argument("--val", type=float, default=0.1)
+        parser.add_argument("--test", type=float, default=0.1)
     args = parser.parse_args(argv)
     if command == "generate_questions" and not 1 <= args.count <= 10000:
         parser.error("--count must be between 1 and 10000")
@@ -650,10 +867,15 @@ def main(command: str, argv: list[str] | None = None) -> int:
             parser.error(str(exc))
     if command != "generate_questions" and args.input is None:
         parser.error("--input is required")
-    if command == "compute_stability" and args.finalize and not args.recompute:
+    if command == "compute_k_n" and args.finalize and not args.recompute:
         parser.error("--finalize requires --recompute")
+    if command == "compute_k_n":
+        if args.original_only and args.splits_dir is not None:
+            parser.error("--splits-dir is only for the default all-anchor mode")
+        if not args.original_only and (args.recompute or args.finalize):
+            parser.error("--recompute and --finalize require --original-only")
     try:
-        config = None if command == "compute_stability" and args.recompute else load_config(args.config)
+        config = load_config(args.config) if command != "compute_k_n" else None
         if command == "generate_questions":
             args.progress = True
             rows = generate_questions(args, config)
@@ -664,14 +886,20 @@ def main(command: str, argv: list[str] | None = None) -> int:
             print(f"Paraphrase log: {args.log_file}", file=sys.stderr)
             rows = generate_paraphrases(args, config)
         elif command == "generate_answers":
+            args.progress = True
             rows = generate_answers(args, config)
-        elif command == "compute_stability":
-            rows = recompute(args) if args.recompute else compute_stability(args, config)
+        elif command == "equivalence_generation_ai":
+            rows = generate_answer_equivalence_ai(args, config)
+        elif command == "compute_k_n":
+            rows = (recompute(args) if args.recompute else compute_k_n(args)) if args.original_only else compute_all_anchors(
+                args.input, args.splits_dir, args.seed, (args.train, args.val, args.test)
+            )
             if args.finalize:
                 rows = finalize(rows)
         else:
             raise WorkflowError(f"Unknown command {command}")
-        write_jsonl(args.output, rows)
+        if command != "generate_answers":
+            write_jsonl(args.output, rows)
     except (WorkflowError, ModelToolError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
