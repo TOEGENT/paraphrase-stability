@@ -1,4 +1,4 @@
-"""Build frozen embeddings from the reviewed dataset splits."""
+"""Build frozen embeddings from grouped splits or compact all-anchor rows."""
 
 from slm_answer_stability.models.embeddings import main
 
