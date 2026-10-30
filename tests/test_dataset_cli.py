@@ -1,13 +1,16 @@
 import json
+import io
 import tempfile
 import unittest
 from argparse import Namespace
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
 from slm_answer_stability.dataset_cli import (
     WorkflowError,
-    compute_stability,
+    compute_k_n,
+    generate_answer_equivalence_ai,
     finalize,
     generate_answers,
     generate_paraphrases,
@@ -145,6 +148,60 @@ class DatasetWorkflowTests(unittest.TestCase):
             self.assertEqual(len(answers), 1)
             self.assertEqual(answers[0]["variant_id"], "v1")
             self.assertEqual(model.call_count, 2)
+
+    def test_answer_generation_keeps_completed_rows_on_model_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            variants_file = base / "variants.jsonl"
+            output_file = base / "answers.jsonl"
+            write_jsonl(variants_file, [
+                {"question_id": "q1", "variant_id": f"v{i}",
+                 "question_original": "2+2?", "question_transformed": f"Variant {i}?",
+                 "paraphrase_review": "approved"}
+                for i in (1, 2)
+            ])
+            progress = io.StringIO()
+            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=[
+                {"answer": "4"}, {"answer": "Four"}, RuntimeError("model down"),
+            ]), redirect_stderr(progress):
+                with self.assertRaisesRegex(RuntimeError, "model down"):
+                    generate_answers(Namespace(input=variants_file, output=output_file,
+                                               progress=True), CONFIG)
+            self.assertEqual([row["variant_id"] for row in read_jsonl(output_file)], ["v1"])
+            self.assertIn("1/2", progress.getvalue())
+
+    def test_answer_generation_writes_each_completed_row(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            variants_file = base / "variants.jsonl"
+            output_file = base / "answers.jsonl"
+            write_jsonl(variants_file, [{"question_id": "q1", "variant_id": "v1",
+                                         "question_original": "2+2?",
+                                         "question_transformed": "Two plus two?",
+                                         "paraphrase_review": "approved"}])
+            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=[
+                {"answer": "4"}, {"answer": "Four"},
+            ]):
+                answers = generate_answers(Namespace(input=variants_file, output=output_file), CONFIG)
+            self.assertEqual(read_jsonl(output_file), answers)
+
+    def test_answer_progress_estimates_remaining_time(self):
+        with tempfile.TemporaryDirectory() as directory:
+            variants_file = Path(directory) / "variants.jsonl"
+            write_jsonl(variants_file, [
+                {"question_id": "q1", "variant_id": f"v{i}",
+                 "question_original": "2+2?", "question_transformed": f"Variant {i}?",
+                 "paraphrase_review": "approved"}
+                for i in (1, 2)
+            ])
+            progress = io.StringIO()
+            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=[
+                {"answer": "4"}, {"answer": "Four"}, {"answer": "Two plus two"},
+            ]), patch("slm_answer_stability.dataset_cli.monotonic",
+                      side_effect=[100, 130, 160]), redirect_stderr(progress):
+                generate_answers(Namespace(input=variants_file, progress=True), CONFIG)
+            self.assertIn("1/2 elapsed 0:00:30 remaining ~0:00:30", progress.getvalue())
+            self.assertIn("2/2 elapsed 0:01:00 remaining ~0:00:00", progress.getvalue())
 
     def test_paraphrase_batches_use_only_same_question_history(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -434,10 +491,20 @@ class DatasetWorkflowTests(unittest.TestCase):
                 "question_transformed": "Two plus two?", "answer_original": "4",
                 "answer_transformed": "Four", "topic": "math", "language": "en",
             }])
+            with self.assertRaisesRegex(WorkflowError, "missing or invalid answer_equivalence"):
+                compute_k_n(Namespace(input=answer_file))
             with patch("slm_answer_stability.dataset_cli.call_model", return_value={
                 "status": "unclear", "rationale_short": "Review", "model": "judge"
-            }):
-                results = compute_stability(Namespace(input=answer_file), CONFIG)
+            }) as judge:
+                judged_rows = generate_answer_equivalence_ai(Namespace(input=answer_file), CONFIG)
+            self.assertEqual(judge.call_count, 1)
+            self.assertNotIn("k", judged_rows[0])
+            self.assertNotIn("N", judged_rows[0])
+            self.assertNotIn("target", judged_rows[0])
+            judged_file = Path(directory) / "judged.jsonl"
+            write_jsonl(judged_file, judged_rows)
+            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=AssertionError("AI called")):
+                results = compute_k_n(Namespace(input=judged_file))
             self.assertIsNone(results[0]["target"])
             self.assertEqual(results[0]["N"], 1)
             self.assertEqual(results[0]["topic"], "math")

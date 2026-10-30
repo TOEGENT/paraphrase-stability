@@ -41,6 +41,17 @@ class ModelToolsTests(unittest.TestCase):
         self.assertNotIn("options", payload)
         self.assertIn("Existing questions to avoid: []", payload["messages"][1]["content"])
 
+    def test_openai_request_passes_thinking_setting(self):
+        config = {**CONFIG, "api_style": "openai", "slm": {
+            "model": "fixed-slm", "chat_template_kwargs": {"enable_thinking": False},
+        }}
+        response = {"choices": [{"message": {"content": "x = 3"}}]}
+        with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse(response)) as request:
+            result = run(Namespace(command="answer", question="Solve for x"), config)
+        payload = json.loads(request.call_args.args[0].data)
+        self.assertEqual(payload["chat_template_kwargs"], {"enable_thinking": False})
+        self.assertEqual(result["answer"], "x = 3")
+
     def test_question_request_includes_existing_questions(self):
         value = {"questions": [{"question": "Сколько граней у куба?"}]}
         with patch("slm_answer_stability.model_tools.urlopen", return_value=MockResponse({"message": {"content": json.dumps(value)}})) as request:

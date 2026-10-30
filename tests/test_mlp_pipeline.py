@@ -5,7 +5,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from slm_answer_stability.dataset_cli import WorkflowError, read_jsonl, write_jsonl
-from slm_answer_stability.models.embeddings import DIMENSION, encode_splits, sha256
+from slm_answer_stability.models.embeddings import (
+    DIMENSION, encode_splits, load_splits, prepare_anchor_splits, sha256,
+)
 from slm_answer_stability.models.training import load_features, predict, train
 
 try:
@@ -106,6 +108,38 @@ class MLPPipelineTests(unittest.TestCase):
             source.write_text(source.read_text(encoding="utf-8") + "\n", encoding="utf-8")
             with self.assertRaisesRegex(WorkflowError, "source JSONL changed"):
                 load_features(splits, features, "val", val_rows)
+
+
+class AnchorEmbeddingInputTests(unittest.TestCase):
+    def test_prepare_anchor_splits_and_reject_group_leakage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            rows = []
+            for split in ("train", "val", "test"):
+                for anchor_id in ("original", "v1"):
+                    rows.append({
+                        "question_id": f"{split}::anchor::{anchor_id}",
+                        "source_question_id": split, "anchor_id": anchor_id,
+                        "question": f"question {split} {anchor_id}", "answer": "x = 2",
+                        "extracted_x": "2", "k": 1, "N": 1, "target": 1.0,
+                        "split": split,
+                    })
+            source = root / "anchors.jsonl"
+            write_jsonl(source, rows)
+            splits = root / "splits"
+            self.assertEqual(prepare_anchor_splits(source, splits),
+                             {"train": 2, "val": 2, "test": 2})
+            self.assertEqual(len(load_splits(splits)["train"]), 2)
+            self.assertEqual(json.loads((splits / "split_manifest.json").read_text(encoding="utf-8"))["mode"],
+                             "all_anchors")
+            with self.assertRaisesRegex(WorkflowError, "not empty"):
+                prepare_anchor_splits(source, splits)
+
+            rows[1]["split"] = "val"
+            leaked = root / "leaked.jsonl"
+            write_jsonl(leaked, rows)
+            with self.assertRaisesRegex(WorkflowError, "overlaps splits"):
+                prepare_anchor_splits(leaked, root / "leaked_splits")
 
 
 if __name__ == "__main__":
