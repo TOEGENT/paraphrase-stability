@@ -108,6 +108,8 @@ def chat(config: dict[str, Any], role: str, system: str, user: str, *, structure
             "seed": settings.get("seed", 0),
             "max_tokens": settings.get("num_predict", 256),
         })
+        if "chat_template_kwargs" in settings:
+            payload["chat_template_kwargs"] = settings["chat_template_kwargs"]
         if structured:
             payload["response_format"] = {"type": "json_object"}
         url = config["base_url"].rstrip("/") + "/chat/completions"
