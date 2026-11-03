@@ -6,6 +6,42 @@
 
 ## Как ориентироваться в репозитории
 
+### Линейные уравнения: от Mathematics Dataset до MLP
+
+Команды ниже запускаются из корня репозитория. Нужны установленные зависимости (`uv sync`), доступный SLM-сервер из `configs/model_tools.example.json` (или собственный конфиг) и, для эмбеддингов и MLP, доступ к `intfloat/multilingual-e5-base` и подходящему устройству PyTorch. Пример использует `algebra.linear_1d`; для систем с двумя неизвестными можно заменить тему на `algebra.linear_2d`. Каждый выходной путь должен быть новым: скрипты не перезаписывают существующие результаты.
+
+```powershell
+# 1. Сгенерировать исходные задачи и точные эталонные ответы.
+uv run python scripts/generate_math_tasks.py --topic algebra.linear_1d --count 100 --seed 42 --format structured --output work/linear_sources.jsonl
+
+# 2. Получить по 10 математически эквивалентных формулировок на задачу.
+uv run python scripts/generate_linear_equation_variants.py --input work/linear_sources.jsonl --variants-per-question 10 --seed 42 --output work/linear_variants.jsonl
+```
+
+`generate_math_tasks.py` записывает `question_id`, `question`, `answer`, `topic` и `module`; режим `structured` добавляет структуру вопроса. Генератор вариантов разбирает линейное уравнение, преобразует его и проверяет сохранение единственного решения через SymPy. Варианты получают `paraphrase_review: pending`, поэтому перед следующим шагом нужно проверить их и поставить `approved` или `rejected` в каждой строке; `generate_answers.py` обработает только одобренные варианты. Для эксперимента с десятью вариантами на задачу следует сохранить все десять одобренных вариантов, иначе знаменатель `N` будет различаться.
+
+```powershell
+# 3. Получить ответы SLM на исходный вопрос и одобренные варианты.
+uv run python scripts/generate_answers.py --input work/linear_variants_reviewed.jsonl --config configs/model_tools.example.json --output work/linear_answers.jsonl
+
+# 4. Отдельно проверить математическую правильность ответов подстановкой.
+uv run python scripts/check_math_answer_correctness.py --input work/linear_answers.jsonl --output work/linear_answers_checked.jsonl
+
+# 5. Сравнить извлечённые конечные значения x для каждой пары ответов.
+uv run python scripts/equivalence_generation.py --input work/linear_answers_checked.jsonl --output work/linear_equivalence.jsonl
+
+# 6. Для каждого ответа-якоря вычислить k, N и target = k/N.
+uv run python scripts/compute_k_N.py --input work/linear_equivalence.jsonl --seed 42 --train 0.8 --val 0.1 --test 0.1 --output work/linear_anchors.jsonl
+
+# 7. Разнести якоря по уже назначенным частям и построить замороженные эмбеддинги.
+uv run python scripts/build_embeddings.py --anchors-input work/linear_anchors.jsonl --splits-dir work/linear_splits --output-dir work/linear_features --device cuda:0
+
+# 8. Обучить MLP и сравнить её с постоянным прогнозом на validation.
+uv run python scripts/train_mlp.py --splits-dir work/linear_splits --features-dir work/linear_features --config configs/mlp.example.json --output-dir work/linear_mlp --device cuda:0
+```
+
+На шаге 4 статусы `answer_original_correctness` и `answer_transformed_correctness` показывают **правильность решения задачи**; они не являются меткой устойчивости. На шаге 5 `equivalence_generation.py` требует однозначно извлекаемое конечное значение `x` и сравнивает ответы между собой; если формат ответа SLM этому не соответствует, пайплайн остановится и ответы потребуется исправить или перегенерировать. На шаге 6 исходный ответ и каждый из десяти ответов на варианты становятся отдельными якорями: получится 11 строк на исходную задачу, каждая с `N=10`. Разбиение выполняется по `source_question_id`, поэтому якоря одного уравнения не попадают одновременно в train, val и test. MLP использует только эмбеддинги вопроса и ответа выбранного якоря и предсказывает долю `k/N`; отчёт обучения и модель сохраняются в `work/linear_mlp/train_report.json` и `work/linear_mlp/model.pt`. Для запуска без CUDA замените `--device cuda:0` на `--device cpu` в двух последних командах.
+
 - [Генерация задач Mathematics Dataset](scripts/README/README_MATH_TASKS.md), [структурный вывод](scripts/README/README_MATH_STRUCTURE.md) и [варианты линейных уравнений](scripts/README/README_LINEAR_VARIANTS.md) — текущий математический маршрут.
 - [Нематематический пайплайн](scripts/README/README_NOT_MATH.md) — перефразы, AI-оценка эквивалентности и обучение; [указатель](scripts/README/README.md) объединяет оба маршрута.
 - `configs/` — настройки моделей, экспериментов и способов перефразирования; `prompts/` — инструкции для генерации и сравнения ответов.
