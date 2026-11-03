@@ -6,8 +6,8 @@
 
 ## Как ориентироваться в репозитории
 
-- [Математический пайплайн](scripts/README_MATH.md) — уравнения, эквивалентность всех ответов, метки для каждого якоря и обучение.
-- [Нематематический пайплайн](scripts/README_NOT_MATH.md) — перефразы, AI-оценка эквивалентности и обучение; [указатель](scripts/README.md) объединяет оба маршрута.
+- [Генерация задач Mathematics Dataset](scripts/README/README_MATH_TASKS.md), [структурный вывод](scripts/README/README_MATH_STRUCTURE.md) и [варианты линейных уравнений](scripts/README/README_LINEAR_VARIANTS.md) — текущий математический маршрут.
+- [Нематематический пайплайн](scripts/README/README_NOT_MATH.md) — перефразы, AI-оценка эквивалентности и обучение; [указатель](scripts/README/README.md) объединяет оба маршрута.
 - `configs/` — настройки моделей, экспериментов и способов перефразирования; `prompts/` — инструкции для генерации и сравнения ответов.
 - `scripts/` — команды для сборки данных, подсчёта устойчивости, обучения и оценки; `src/slm_answer_stability/` — код, который они используют.
 - [data/README.md](data/README.md) и `data/examples/` — формат данных и маленькие примеры; `work/` — рабочие файлы запусков.
@@ -40,5 +40,5 @@ MLP получает эмбеддинги только выбранных воп
 - [Входы и выходы скриптов](docs/pipeline_contracts.md)
 - [Сборка датасета](docs/dataset_cli.md)
 - [Обучение и проверка MLP](docs/mlp_pipeline.md)
-- [Команды для математического набора](scripts/README_MATH.md)
-- [Команды для нематематического набора](scripts/README_NOT_MATH.md)
+- [Команды для математических задач](scripts/README/README_MATH_TASKS.md)
+- [Команды для нематематического набора](scripts/README/README_NOT_MATH.md)
