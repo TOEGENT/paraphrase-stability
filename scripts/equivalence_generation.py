@@ -20,8 +20,8 @@ from pathlib import Path
 
 
 NUMBER = r"[+-]?\s*(?:\\(?:dfrac|tfrac|frac)\s*\{[+-]?\d+\}\s*\{[+-]?\d+\}|\d+\s*/\s*[+-]?\d+|\d+(?:\.\d+)?|\.\d+)"
-FINAL = re.compile(rf"(?:x\s*=\s*)?(?P<value>{NUMBER})", re.IGNORECASE)
-ASSIGNMENT = re.compile(rf"(?<![A-Za-z0-9+-])x\s*=\s*(?P<value>{NUMBER})(?![\w./])", re.IGNORECASE)
+FINAL = re.compile(rf"(?:[a-z]\s*=\s*)?(?P<value>{NUMBER})", re.IGNORECASE)
+ASSIGNMENT = re.compile(rf"(?<![A-Za-z0-9+-])[a-z]\s*=\s*(?P<value>{NUMBER})(?![\w./])", re.IGNORECASE)
 LATEX_FRACTION = re.compile(r"(?P<sign>[+-]?)\s*\\(?:dfrac|tfrac|frac)\s*\{(?P<num>[+-]?\d+)\}\s*\{(?P<den>[+-]?\d+)\}")
 PREFIX = re.compile(r"^(?:(?:final\s+answer|answer|the\s+answer\s+is|ответ|итоговый\s+ответ)\s*[:=]?\s*)", re.IGNORECASE)
 
