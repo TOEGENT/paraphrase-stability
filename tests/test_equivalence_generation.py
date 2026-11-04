@@ -22,6 +22,7 @@ class MathAnswerVerifierTests(unittest.TestCase):
                 self.assertIsNone(extract_final_x(answer))
                 self.assertEqual(verify_pair("x = 1", answer)["answer_equivalence"], "unclear")
         self.assertEqual(extract_final_x("To solve the equation, rearrange terms.\nFinal answer: x = 4."), 4)
+        self.assertEqual(extract_final_x("i = -20"), -20)  # Mathematics Dataset uses any one-letter variable
 
     def test_intermediate_variable_terms_are_not_final_assignments(self):
         self.assertEqual(extract_final_x("6x = -19\nx = -19/6"), Fraction(-19, 6))
