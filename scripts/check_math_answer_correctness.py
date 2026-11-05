@@ -12,10 +12,7 @@ from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 
-try:
-    from scripts.equivalence_generation import extract_final_x
-except ModuleNotFoundError:  # Direct execution sets sys.path[0] to scripts/.
-    from equivalence_generation import extract_final_x
+from slm_answer_stability.annotation.answer_extraction import extract_final_x
 
 
 class UnsupportedEquation(ValueError):

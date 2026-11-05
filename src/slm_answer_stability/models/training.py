@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from slm_answer_stability.dataset_cli import WorkflowError, write_jsonl
+from slm_answer_stability.data.io import WorkflowError, write_jsonl
 from slm_answer_stability.models.embeddings import DIMENSION, SPLITS, load_splits, sha256
 from slm_answer_stability.models.mlp import build_model
 
@@ -20,7 +20,7 @@ def load_features(split_dir: Path, features_dir: Path, split: str, rows: list[di
     try:
         import numpy as np
     except ImportError as exc:
-        raise WorkflowError("Install model dependencies: pip install -e '.[mlp]'") from exc
+        raise WorkflowError("Install model dependencies: uv sync (or pip install -e .)") from exc
     manifest_path = features_dir / "manifest.json"
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -128,7 +128,7 @@ def train(split_dir: Path, features_dir: Path, output_dir: Path, config_path: Pa
         import numpy as np
         import torch
     except ImportError as exc:
-        raise WorkflowError("Install model dependencies: pip install -e '.[mlp]'") from exc
+        raise WorkflowError("Install model dependencies: uv sync (or pip install -e .)") from exc
     config = read_config(config_path)
     if output_dir.exists() and any(output_dir.iterdir()):
         raise WorkflowError(f"Output directory is not empty: {output_dir}")
@@ -202,7 +202,7 @@ def predict(split_dir: Path, features_dir: Path, model_dir: Path, output_dir: Pa
     try:
         import torch
     except ImportError as exc:
-        raise WorkflowError("Install model dependencies: pip install -e '.[mlp]'") from exc
+        raise WorkflowError("Install model dependencies: uv sync (or pip install -e .)") from exc
     if split not in ("val", "test") or (split == "test" and not final):
         raise WorkflowError("Use --split val, or --split test with --final")
     if output_dir.exists() and any(output_dir.iterdir()):

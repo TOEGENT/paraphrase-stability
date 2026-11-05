@@ -7,6 +7,7 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
+from slm_answer_stability.generation.client import InvalidGeneratorJSON
 from slm_answer_stability.dataset_cli import (
     WorkflowError,
     compute_k_n,
@@ -34,7 +35,7 @@ class DatasetWorkflowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             existing = Path(directory) / "existing.jsonl"
             write_jsonl(existing, [{"question_id": "old", "question": "What is two plus two?"}])
-            with patch("slm_answer_stability.dataset_cli.call_model", return_value={
+            with patch("slm_answer_stability.generation.client.call_model", return_value={
                 "questions": [{"question": "  what is two plus two?  "}], "model": "generator"
             }) as model:
                 rows = generate_questions(Namespace(existing=existing, topic="math", count=1), CONFIG)
@@ -55,7 +56,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 questions.append({"question": f"What is {next_number} plus 1?"})
             return {"questions": questions, "model": "generator"}
 
-        with patch("slm_answer_stability.dataset_cli.call_model", side_effect=model_response) as model:
+        with patch("slm_answer_stability.generation.client.call_model", side_effect=model_response) as model:
             rows = generate_questions(Namespace(existing=None, topic="math", count=200, batch_size=20, duplicate_check="exact"), CONFIG)
         self.assertEqual(len(rows), 200)
         self.assertEqual(model.call_count, 10)
@@ -69,7 +70,7 @@ class DatasetWorkflowTests(unittest.TestCase):
         self.assertTrue(all(row["duplicate_status"] == "unchecked" for row in rows))
 
     def test_default_duplicate_check_does_not_call_judge(self):
-        with patch("slm_answer_stability.dataset_cli.call_model", return_value={
+        with patch("slm_answer_stability.generation.client.call_model", return_value={
             "questions": [{"question": "What is 3 plus 4?"}], "model": "generator"
         }) as model:
             rows = generate_questions(Namespace(existing=None, topic="math", count=1), CONFIG)
@@ -83,14 +84,14 @@ class DatasetWorkflowTests(unittest.TestCase):
             nonlocal next_number
             self.assertEqual(command, "questions")
             if kwargs["count"] > 2:
-                raise WorkflowError("questions: generator returned invalid JSON: Unterminated string")
+                raise InvalidGeneratorJSON("questions: generator returned invalid JSON: Unterminated string")
             rows = []
             for _ in range(kwargs["count"]):
                 next_number += 1
                 rows.append({"question": f"Question {next_number}?"})
             return {"questions": rows, "model": "generator"}
 
-        with patch("slm_answer_stability.dataset_cli.call_model", side_effect=model_response) as model:
+        with patch("slm_answer_stability.generation.client.call_model", side_effect=model_response) as model:
             rows = generate_questions(Namespace(existing=None, topic="math", count=5,
                                                 batch_size=5, duplicate_check="exact"), CONFIG)
         self.assertEqual(len(rows), 5)
@@ -107,7 +108,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 generate_paraphrases(Namespace(input=questions, count=1), CONFIG)
             approved = base / "approved.jsonl"
             write_jsonl(approved, [{"question_id": "q1", "question": "2+2?", "topic": "math", "language": "en", "question_review": "approved"}])
-            with patch("slm_answer_stability.dataset_cli.call_model", return_value={
+            with patch("slm_answer_stability.generation.client.call_model", return_value={
                 "variants": [{"question": "What is two plus two?", "transformation_type": "lexical"}],
                 "model": "generator",
             }):
@@ -117,7 +118,7 @@ class DatasetWorkflowTests(unittest.TestCase):
             variants[0]["paraphrase_review"] = "approved"
             variant_file = base / "variants.jsonl"
             write_jsonl(variant_file, variants)
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=[
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=[
                 {"answer": "4", "model": "fixed-slm"},
                 {"answer": "Four", "model": "fixed-slm"},
             ]):
@@ -141,7 +142,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 generate_answers(Namespace(input=variants_file), CONFIG)
             rows[0]["paraphrase_review"] = "approved"
             variants_file.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=[
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=[
                 {"answer": "4"}, {"answer": "Four"},
             ]) as model:
                 answers = generate_answers(Namespace(input=variants_file), CONFIG)
@@ -161,7 +162,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 for i in (1, 2)
             ])
             progress = io.StringIO()
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=[
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=[
                 {"answer": "4"}, {"answer": "Four"}, RuntimeError("model down"),
             ]), redirect_stderr(progress):
                 with self.assertRaisesRegex(RuntimeError, "model down"):
@@ -179,7 +180,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                                          "question_original": "2+2?",
                                          "question_transformed": "Two plus two?",
                                          "paraphrase_review": "approved"}])
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=[
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=[
                 {"answer": "4"}, {"answer": "Four"},
             ]):
                 answers = generate_answers(Namespace(input=variants_file, output=output_file), CONFIG)
@@ -195,9 +196,9 @@ class DatasetWorkflowTests(unittest.TestCase):
                 for i in (1, 2)
             ])
             progress = io.StringIO()
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=[
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=[
                 {"answer": "4"}, {"answer": "Four"}, {"answer": "Two plus two"},
-            ]), patch("slm_answer_stability.dataset_cli.monotonic",
+            ]), patch("slm_answer_stability.generation.answers.monotonic",
                       side_effect=[100, 130, 160]), redirect_stderr(progress):
                 generate_answers(Namespace(input=variants_file, progress=True), CONFIG)
             self.assertIn("1/2 elapsed 0:00:30 remaining ~0:00:30", progress.getvalue())
@@ -224,7 +225,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 return {"variants": [{"question": f"Rewrite {number}?",
                                        "transformation_type": "lexical"}], "model": "generator"}
 
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=model_response) as model:
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=model_response) as model:
                 rows = generate_paraphrases(Namespace(input=questions, existing=existing,
                                                        count=2, batch_size=1), CONFIG)
             self.assertEqual([row["variant_id"] for row in rows],
@@ -243,7 +244,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 return {"variants": [{"question": next(answers),
                                       "transformation_type": "model label"}], "model": "generator"}
 
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=model_response) as model:
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=model_response) as model:
                 rows = generate_paraphrases(Namespace(input=questions, count=3, batch_size=5,
                                                        mode="translation",
                                                        targets=["English", "German"]), CONFIG)
@@ -264,7 +265,7 @@ class DatasetWorkflowTests(unittest.TestCase):
             languages.write_text("# comment\nItalian\nSpanish\n", encoding="utf-8")
             with patch.dict("slm_answer_stability.dataset_cli.TARGET_FILES",
                             {"translation": languages}):
-                with patch("slm_answer_stability.dataset_cli.call_model", return_value={
+                with patch("slm_answer_stability.generation.client.call_model", return_value={
                     "variants": [{"question": "Chi?", "transformation_type": "translation"}],
                     "model": "generator",
                 }) as model:
@@ -292,7 +293,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 {"variants": [{"question": "Wer?", "transformation_type": "translation"}],
                  "model": "generator"},
             ]
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=responses) as model:
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=responses) as model:
                 rows = generate_paraphrases(Namespace(input=questions, count=2,
                                                        mode="translation",
                                                        targets=["English", "German"]), CONFIG)
@@ -318,7 +319,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                              structures=["table", "JSON"],
                              styles=["literary", "scientific"],
                              languages=["English", "German"])
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=model_response):
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=model_response):
                 rows = generate_paraphrases(args, CONFIG)
             self.assertEqual(len(rows), 8)
             self.assertEqual(len(calls), 14)
@@ -361,7 +362,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                         "model": "generator"}
 
             with patch.dict("slm_answer_stability.dataset_cli.TARGET_FILES", files):
-                with patch("slm_answer_stability.dataset_cli.call_model",
+                with patch("slm_answer_stability.generation.client.call_model",
                            side_effect=model_response):
                     rows = generate_paraphrases(Namespace(input=questions, mode="combined",
                                                            count=1), CONFIG)
@@ -382,7 +383,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 {"variants": [{"question": "Rewrite B?", "transformation_type": "syntactic"}],
                  "model": "generator"},
             ]
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=responses) as model:
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=responses) as model:
                 rows = generate_paraphrases(Namespace(input=questions, count=2, batch_size=2), CONFIG)
             self.assertEqual([row["question_transformed"] for row in rows],
                              ["Rewrite A?", "Rewrite B?"])
@@ -400,7 +401,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 {"variants": [{"question": "Rewrite B?", "transformation_type": "syntactic"}],
                  "model": "generator"},
             ]
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=responses) as model:
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=responses) as model:
                 rows = generate_paraphrases(Namespace(input=questions, count=2, batch_size=2), CONFIG)
             self.assertEqual([row["question_transformed"] for row in rows],
                              ["Rewrite A?", "Rewrite B?"])
@@ -416,7 +417,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 {"question": "Rewrite A?", "transformation_type": "syntactic"},
                 {"question": "Rewrite B?", "transformation_type": "stylistic"},
             ], "model": "generator", "raw_variant_count": 3, "invalid_variant_count": 0}
-            with patch("slm_answer_stability.dataset_cli.call_model", return_value=response) as model:
+            with patch("slm_answer_stability.generation.client.call_model", return_value=response) as model:
                 rows = generate_paraphrases(Namespace(input=questions, count=1, batch_size=1), CONFIG)
             self.assertEqual([row["question_transformed"] for row in rows], ["Rewrite A?"])
             self.assertEqual(model.call_count, 1)
@@ -427,13 +428,13 @@ class DatasetWorkflowTests(unittest.TestCase):
             write_jsonl(questions, [{"question_id": "q1", "question": "Original?",
                                      "question_review": "approved"}])
             responses = [
-                WorkflowError("paraphrases: generator returned invalid JSON: Unterminated string"),
+                InvalidGeneratorJSON("paraphrases: generator returned invalid JSON: Unterminated string"),
                 {"variants": [{"question": "Rewrite A?", "transformation_type": "lexical"}],
                  "model": "generator"},
                 {"variants": [{"question": "Rewrite B?", "transformation_type": "syntactic"}],
                  "model": "generator"},
             ]
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=responses) as model:
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=responses) as model:
                 rows = generate_paraphrases(Namespace(input=questions, count=2, batch_size=2), CONFIG)
             self.assertEqual(len(rows), 2)
             self.assertEqual([call.kwargs["count"] for call in model.call_args_list], [2, 1, 1])
@@ -447,7 +448,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                                      "question_review": "approved"}])
             response = {"variants": [{"question": "Original?", "transformation_type": "lexical"}],
                         "model": "generator", "raw_variant_count": 1, "invalid_variant_count": 0}
-            with patch("slm_answer_stability.dataset_cli.call_model", return_value=response):
+            with patch("slm_answer_stability.generation.client.call_model", return_value=response):
                 with self.assertRaisesRegex(WorkflowError, "5 attempts"):
                     generate_paraphrases(Namespace(input=questions, count=1, batch_size=1,
                                                    log_file=log_file, run_id="run-1"), CONFIG)
@@ -473,7 +474,7 @@ class DatasetWorkflowTests(unittest.TestCase):
                 return {"variants": [{"question": "Rewrite?", "transformation_type": "lexical"}],
                         "model": "generator"}
 
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=model_response):
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=model_response):
                 generate_paraphrases(Namespace(input=questions, count=1, batch_size=1,
                                                log_file=log_file, run_id="run-1"), CONFIG)
             events = read_jsonl(log_file)
@@ -493,7 +494,7 @@ class DatasetWorkflowTests(unittest.TestCase):
             }])
             with self.assertRaisesRegex(WorkflowError, "missing or invalid answer_equivalence"):
                 compute_k_n(Namespace(input=answer_file))
-            with patch("slm_answer_stability.dataset_cli.call_model", return_value={
+            with patch("slm_answer_stability.generation.client.call_model", return_value={
                 "status": "unclear", "rationale_short": "Review", "model": "judge"
             }) as judge:
                 judged_rows = generate_answer_equivalence_ai(Namespace(input=answer_file), CONFIG)
@@ -503,7 +504,7 @@ class DatasetWorkflowTests(unittest.TestCase):
             self.assertNotIn("target", judged_rows[0])
             judged_file = Path(directory) / "judged.jsonl"
             write_jsonl(judged_file, judged_rows)
-            with patch("slm_answer_stability.dataset_cli.call_model", side_effect=AssertionError("AI called")):
+            with patch("slm_answer_stability.generation.client.call_model", side_effect=AssertionError("AI called")):
                 results = compute_k_n(Namespace(input=judged_file))
             self.assertIsNone(results[0]["target"])
             self.assertEqual(results[0]["N"], 1)

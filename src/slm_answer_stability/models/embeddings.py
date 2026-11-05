@@ -11,7 +11,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from slm_answer_stability.dataset_cli import WorkflowError, read_jsonl, required_text, write_jsonl
+from slm_answer_stability.data.io import WorkflowError, read_jsonl, required_text, write_jsonl
 from slm_answer_stability.dataset_prep import validate_final
 
 MODEL = "intfloat/multilingual-e5-base"
@@ -134,7 +134,7 @@ def encode_splits(split_dir: Path, output_dir: Path, revision: str | None, devic
         from huggingface_hub import model_info
         from sentence_transformers import SentenceTransformer
     except ImportError as exc:
-        raise WorkflowError("Install model dependencies: pip install -e '.[mlp]'") from exc
+        raise WorkflowError("Install model dependencies: uv sync (or pip install -e .)") from exc
     if revision is None:
         try:
             revision = model_info(MODEL).sha

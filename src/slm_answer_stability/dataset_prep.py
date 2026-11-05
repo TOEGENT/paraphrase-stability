@@ -6,12 +6,14 @@ import argparse
 import csv
 import hashlib
 import json
-import random
 import sys
 from pathlib import Path
 from typing import Any
 
-from .dataset_cli import WorkflowError, normalize, read_jsonl, unique_ids, write_jsonl
+from .constants import RESOLVED_STATUSES
+from .data.io import (WorkflowError, ensure_new_output, normalize, read_jsonl, unique_ids,
+                      write_jsonl)
+from .data.splits import partition_keys, validate_ratios
 
 
 def import_questions(args: argparse.Namespace) -> list[dict[str, Any]]:
@@ -108,7 +110,7 @@ def validate_final(rows: list[dict[str, Any]]) -> list[str]:
             if not isinstance(variant.get("answer"), str) or not variant["answer"].strip():
                 problems.append(f"{where}: missing variant answer")
             status = variant.get("answer_equivalence")
-            if status not in ("equivalent", "non_equivalent"):
+            if status not in RESOLVED_STATUSES:
                 problems.append(f"{where}: unresolved answer_equivalence")
             statuses.append(status)
         n, k = len(variants), statuses.count("equivalent")
@@ -128,25 +130,13 @@ def split_dataset(rows: list[dict[str, Any]], ratios: tuple[float, float, float]
     problems = validate_final(rows)
     if problems:
         raise WorkflowError("Invalid final dataset: " + "; ".join(problems))
-    if any(not 0 < ratio < 1 for ratio in ratios) or abs(sum(ratios) - 1) > 1e-9:
-        raise WorkflowError("Split ratios must be positive fractions summing to 1")
+    validate_ratios(ratios)
     if len(rows) < 3:
         raise WorkflowError("At least three questions are required for three nonempty splits")
-    shuffled = sorted(rows, key=lambda row: row["question_id"])
-    random.Random(seed).shuffle(shuffled)
-    # Reserve one question for each split, then distribute the remainder by largest remainder.
-    remainder = len(rows) - 3
-    quotas = [remainder * ratio for ratio in ratios]
-    counts = [1 + int(quota) for quota in quotas]
-    for index in sorted(range(3), key=lambda i: (quotas[i] % 1, -i), reverse=True)[:remainder - sum(map(int, quotas))]:
-        counts[index] += 1
-    names = ("train", "val", "test")
-    output: dict[str, list[dict[str, Any]]] = {}
-    offset = 0
-    for name, count in zip(names, counts):
-        output[name] = [{**row, "split": name} for row in shuffled[offset:offset + count]]
-        offset += count
-    return output
+    by_id = {row["question_id"]: row for row in rows}
+    parts = partition_keys(by_id, ratios, seed)
+    return {name: [{**by_id[question_id], "split": name} for question_id in ids]
+            for name, ids in parts.items()}
 
 
 def check_dataset(rows: list[dict[str, Any]], min_questions: int, min_variants: int, min_total_variants: int) -> dict[str, Any]:
@@ -209,8 +199,7 @@ def main(command: str, argv: list[str] | None = None) -> int:
                 raise WorkflowError("Minimum counts cannot be negative")
             report = check_dataset(read_jsonl(args.input), args.min_questions, args.min_variants_per_question, args.min_total_variants)
             if args.report:
-                if args.report.exists():
-                    raise WorkflowError(f"Output already exists: {args.report}")
+                ensure_new_output(args.report)
                 args.report.parent.mkdir(parents=True, exist_ok=True)
                 args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             print(json.dumps(report, ensure_ascii=False, indent=2))

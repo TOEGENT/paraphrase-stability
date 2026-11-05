@@ -11,7 +11,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from slm_answer_stability.dataset_cli import WorkflowError, normalize, read_jsonl, write_jsonl
+from slm_answer_stability.data.io import WorkflowError, normalize, read_jsonl, write_jsonl
 from slm_answer_stability.dataset_prep import validate_final
 from slm_answer_stability.models.embeddings import sha256
 

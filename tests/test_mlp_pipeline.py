@@ -18,7 +18,7 @@ except ImportError:
     torch = None
 
 
-@unittest.skipUnless(np is not None and torch is not None, "Install the mlp optional dependencies")
+@unittest.skipUnless(np is not None and torch is not None, "Install the project dependencies (uv sync)")
 class MLPPipelineTests(unittest.TestCase):
     def test_embedding_stage_uses_only_original_pair(self):
         with tempfile.TemporaryDirectory() as directory:
