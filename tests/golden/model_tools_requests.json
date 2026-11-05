@@ -1,0 +1,444 @@
+{
+ "ollama/answer": {
+  "body": "{\"model\": \"fixed-slm\", \"messages\": [{\"role\": \"system\", \"content\": \"Answer the question directly and briefly.\"}, {\"role\": \"user\", \"content\": \"Solve 2*x = 6 for x.\"}], \"stream\": false, \"options\": {\"temperature\": 0, \"seed\": 42, \"num_predict\": 128}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "answer": "x = 3",
+   "model": "fixed-slm"
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "ollama/judge_answer": {
+  "body": "{\"model\": \"judge\", \"messages\": [{\"role\": \"system\", \"content\": \"Decide whether two answers have the same meaning in the context of the original question. Correctness is separate from equivalence. Return JSON with status and rationale_short. status must be equivalent, non_equivalent, unclear, or insufficient_context.\"}, {\"role\": \"user\", \"content\": \"Question: Кто?\\nOriginal answer: Анна\\nAnswer to rewritten question: Борис\"}], \"stream\": false, \"options\": {\"temperature\": 0, \"seed\": 42, \"num_predict\": 256}, \"format\": \"json\"}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "model": "judge",
+   "rationale_short": "same",
+   "status": "equivalent"
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "ollama/judge_question": {
+  "body": "{\"model\": \"judge\", \"messages\": [{\"role\": \"system\", \"content\": \"Decide whether the rewritten question preserves all facts, constraints, negation, and the requested answer of the original question. Return JSON with status and rationale_short. status must be equivalent, non_equivalent, unclear, or insufficient_context.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто?\\nRewritten question: Назовите человека.\"}], \"stream\": false, \"options\": {\"temperature\": 0, \"seed\": 42, \"num_predict\": 256}, \"format\": \"json\"}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "model": "judge",
+   "rationale_short": "same",
+   "status": "equivalent"
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "ollama/paraphrase_combined_stage": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone, semantically equivalent versions of the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Do not add facts, hints, or a solution. Translate the entire question into the requested target language. Use that language for both facts and the final request; preserve names, numbers, units, logical relationships, and answer format. Do not include the original text. Return JSON with a variants array of objects containing question and transformation_type. Each variant must differ from previous variants. Preserve the input's table, CSV, JSON, or list structure. For JSON, keep structural keys and translate or restyle human-readable values.\"}, {\"role\": \"user\", \"content\": \"Original question: {\\\"request\\\":\\\"Кто?\\\"}\\nNumber of variants: 1\\nTransformation mode: translation\\nTarget: English\\nExisting paraphrases to avoid: []\\nVariation attempt: 0. Use a new wording pattern for this attempt.\\nSource question for checking facts only: Кто?\\nTransform the immediate input above.\"}], \"stream\": false, \"options\": {\"temperature\": 0.7, \"seed\": 42, \"num_predict\": 1024}, \"format\": \"json\"}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "Кто это такой?",
+     "transformation_type": "lexical"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "ollama/paraphrase_existing_attempt": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone paraphrases in the same language as the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Change the wording substantially: move the requested quantity to the beginning, reorder clauses, switch between a question and an instruction, change sentence structure, or use an exactly equivalent mathematical notation where appropriate. Choose natural constructions rather than just replacing one word with a synonym. Do not add facts, solve the task, or copy a previous variant. Examples of allowed changes (illustrations only; do not reuse their facts or wording):\\nOriginal: В коробке 12 красных шаров и 8 синих. Сколько шаров всего?\\nVariants: Сколько всего шаров в коробке, если красных в ней 12, а синих 8? | Коробка содержит 8 синих и 12 красных шаров; найдите общее число шаров.\\nOriginal: Чему равна сумма 18 и произведения 4 на 6?\\nVariants: Вычислите 18 + (4 × 6). | Если к 18 прибавить результат умножения 4 на 6, какое число получится?\\nOriginal: Какой город является столицей Италии?\\nVariants: Назовите столицу Италии. | Укажите город, являющийся столицей Италии.\\nReturn JSON with a variants array of objects containing question and transformation_type. Each output must differ from the supplied existing paraphrases, including near-identical wording.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто?\\nNumber of variants: 1\\nExisting paraphrases to avoid: [\\\"Кто именно?\\\"]\\nVariation attempt: 7. Choose a different grammatical subject and reorder the facts without changing them.\"}], \"stream\": false, \"options\": {\"temperature\": 0.7, \"seed\": 42, \"num_predict\": 1024}, \"format\": \"json\"}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "Кто это такой?",
+     "transformation_type": "lexical"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "ollama/paraphrase_general": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone paraphrases in the same language as the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Change the wording substantially: move the requested quantity to the beginning, reorder clauses, switch between a question and an instruction, change sentence structure, or use an exactly equivalent mathematical notation where appropriate. Choose natural constructions rather than just replacing one word with a synonym. Do not add facts, solve the task, or copy a previous variant. Examples of allowed changes (illustrations only; do not reuse their facts or wording):\\nOriginal: В коробке 12 красных шаров и 8 синих. Сколько шаров всего?\\nVariants: Сколько всего шаров в коробке, если красных в ней 12, а синих 8? | Коробка содержит 8 синих и 12 красных шаров; найдите общее число шаров.\\nOriginal: Чему равна сумма 18 и произведения 4 на 6?\\nVariants: Вычислите 18 + (4 × 6). | Если к 18 прибавить результат умножения 4 на 6, какое число получится?\\nOriginal: Какой город является столицей Италии?\\nVariants: Назовите столицу Италии. | Укажите город, являющийся столицей Италии.\\nReturn JSON with a variants array of objects containing question and transformation_type. Each output must differ from the supplied existing paraphrases, including near-identical wording.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто?\\nNumber of variants: 1\\nExisting paraphrases to avoid: []\\nVariation attempt: 0. Use a new wording pattern for this attempt.\"}], \"stream\": false, \"options\": {\"temperature\": 0.7, \"seed\": 42, \"num_predict\": 1024}, \"format\": \"json\"}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "Кто это такой?",
+     "transformation_type": "lexical"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "ollama/paraphrase_structure": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone, semantically equivalent versions of the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Do not add facts, hints, or a solution. Recast the question in the requested structure. Use a real table, CSV, JSON, or list when requested, including every fact and an explicit request for the answer. The structure is part of the question text, not the response envelope. Return JSON with a variants array of objects containing question and transformation_type. Each variant must differ from previous variants.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто?\\nNumber of variants: 1\\nTransformation mode: structure\\nTarget: JSON\\nExisting paraphrases to avoid: []\\nVariation attempt: 0. Use a new wording pattern for this attempt.\"}], \"stream\": false, \"options\": {\"temperature\": 0.7, \"seed\": 42, \"num_predict\": 1024}, \"format\": \"json\"}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "{\"request\":\"Who?\"}",
+     "transformation_type": "structure"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "ollama/paraphrase_style": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone, semantically equivalent versions of the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Do not add facts, hints, or a solution. Rewrite the whole question in the requested register. Change diction and sentence construction substantially while keeping every fact and the requested answer. Do not add a story, explanation, solution, or new assumptions. Return JSON with a variants array of objects containing question and transformation_type. Each variant must differ from previous variants.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто?\\nNumber of variants: 1\\nTransformation mode: style\\nTarget: formal\\nExisting paraphrases to avoid: []\\nVariation attempt: 0. Use a new wording pattern for this attempt.\"}], \"stream\": false, \"options\": {\"temperature\": 0.7, \"seed\": 42, \"num_predict\": 1024}, \"format\": \"json\"}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "Кто это такой?",
+     "transformation_type": "lexical"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "ollama/paraphrase_translation": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone, semantically equivalent versions of the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Do not add facts, hints, or a solution. Translate the entire question into the requested target language. Use that language for both facts and the final request; preserve names, numbers, units, logical relationships, and answer format. Do not include the original text. Return JSON with a variants array of objects containing question and transformation_type. Each variant must differ from previous variants.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто это?\\nNumber of variants: 1\\nTransformation mode: translation\\nTarget: English\\nExisting paraphrases to avoid: []\\nVariation attempt: 0. Use a new wording pattern for this attempt.\"}], \"stream\": false, \"options\": {\"temperature\": 0.7, \"seed\": 42, \"num_predict\": 1024}, \"format\": \"json\"}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "Кто это такой?",
+     "transformation_type": "lexical"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "ollama/questions": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create unambiguous questions that each require one short final answer. Write questions in the same language as the topic. For mathematical expressions, use explicit parentheses whenever operation order could be ambiguous. Make the new questions distinct from the supplied existing questions, including their problem types and solution patterns; changing only numbers or names is not enough. Also vary the questions within the new batch. Return JSON with a questions array of objects containing question and topic. These are synthetic tasks; do not claim they came from a real dataset.\"}, {\"role\": \"user\", \"content\": \"Topic: математика\\nNumber of questions: 1\\nExisting questions to avoid: []\"}], \"stream\": false, \"options\": {\"temperature\": 0.7, \"seed\": 42, \"num_predict\": 1024}, \"format\": \"json\"}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "model": "generator",
+   "questions": [
+    {
+     "question": "Сколько граней у куба?",
+     "topic": "математика"
+    }
+   ],
+   "source": "synthetic"
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "ollama/questions_existing": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create unambiguous questions that each require one short final answer. Write questions in the same language as the topic. For mathematical expressions, use explicit parentheses whenever operation order could be ambiguous. Make the new questions distinct from the supplied existing questions, including their problem types and solution patterns; changing only numbers or names is not enough. Also vary the questions within the new batch. Return JSON with a questions array of objects containing question and topic. These are synthetic tasks; do not claim they came from a real dataset.\"}, {\"role\": \"user\", \"content\": \"Topic: математика\\nNumber of questions: 1\\nExisting questions to avoid: [\\\"Сколько будет 2 + 2?\\\"]\"}], \"stream\": false, \"options\": {\"temperature\": 0.7, \"seed\": 42, \"num_predict\": 1024}, \"format\": \"json\"}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "model": "generator",
+   "questions": [
+    {
+     "question": "Сколько граней у куба?",
+     "topic": "математика"
+    }
+   ],
+   "source": "synthetic"
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:11434/api/chat"
+ },
+ "openai/answer": {
+  "body": "{\"model\": \"fixed-slm\", \"messages\": [{\"role\": \"system\", \"content\": \"Answer briefly.\"}, {\"role\": \"user\", \"content\": \"Solve 2*x = 6 for x.\"}], \"stream\": false, \"temperature\": 0, \"seed\": 42, \"max_tokens\": 128, \"chat_template_kwargs\": {\"enable_thinking\": false}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "answer": "x = 3",
+   "model": "fixed-slm"
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ },
+ "openai/judge_answer": {
+  "body": "{\"model\": \"judge\", \"messages\": [{\"role\": \"system\", \"content\": \"Decide whether two answers have the same meaning in the context of the original question. Correctness is separate from equivalence. Return JSON with status and rationale_short. status must be equivalent, non_equivalent, unclear, or insufficient_context.\"}, {\"role\": \"user\", \"content\": \"Question: Кто?\\nOriginal answer: Анна\\nAnswer to rewritten question: Борис\"}], \"stream\": false, \"temperature\": 0, \"seed\": 42, \"max_tokens\": 256, \"response_format\": {\"type\": \"json_object\"}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "model": "judge",
+   "rationale_short": "same",
+   "status": "equivalent"
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ },
+ "openai/judge_question": {
+  "body": "{\"model\": \"judge\", \"messages\": [{\"role\": \"system\", \"content\": \"Decide whether the rewritten question preserves all facts, constraints, negation, and the requested answer of the original question. Return JSON with status and rationale_short. status must be equivalent, non_equivalent, unclear, or insufficient_context.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто?\\nRewritten question: Назовите человека.\"}], \"stream\": false, \"temperature\": 0, \"seed\": 42, \"max_tokens\": 256, \"response_format\": {\"type\": \"json_object\"}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "model": "judge",
+   "rationale_short": "same",
+   "status": "equivalent"
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ },
+ "openai/paraphrase_combined_stage": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone, semantically equivalent versions of the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Do not add facts, hints, or a solution. Translate the entire question into the requested target language. Use that language for both facts and the final request; preserve names, numbers, units, logical relationships, and answer format. Do not include the original text. Return JSON with a variants array of objects containing question and transformation_type. Each variant must differ from previous variants. Preserve the input's table, CSV, JSON, or list structure. For JSON, keep structural keys and translate or restyle human-readable values.\"}, {\"role\": \"user\", \"content\": \"Original question: {\\\"request\\\":\\\"Кто?\\\"}\\nNumber of variants: 1\\nTransformation mode: translation\\nTarget: English\\nExisting paraphrases to avoid: []\\nVariation attempt: 0. Use a new wording pattern for this attempt.\\nSource question for checking facts only: Кто?\\nTransform the immediate input above.\"}], \"stream\": false, \"temperature\": 0.7, \"seed\": 42, \"max_tokens\": 1024, \"response_format\": {\"type\": \"json_object\"}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "Кто это такой?",
+     "transformation_type": "lexical"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ },
+ "openai/paraphrase_existing_attempt": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone paraphrases in the same language as the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Change the wording substantially: move the requested quantity to the beginning, reorder clauses, switch between a question and an instruction, change sentence structure, or use an exactly equivalent mathematical notation where appropriate. Choose natural constructions rather than just replacing one word with a synonym. Do not add facts, solve the task, or copy a previous variant. Examples of allowed changes (illustrations only; do not reuse their facts or wording):\\nOriginal: В коробке 12 красных шаров и 8 синих. Сколько шаров всего?\\nVariants: Сколько всего шаров в коробке, если красных в ней 12, а синих 8? | Коробка содержит 8 синих и 12 красных шаров; найдите общее число шаров.\\nOriginal: Чему равна сумма 18 и произведения 4 на 6?\\nVariants: Вычислите 18 + (4 × 6). | Если к 18 прибавить результат умножения 4 на 6, какое число получится?\\nOriginal: Какой город является столицей Италии?\\nVariants: Назовите столицу Италии. | Укажите город, являющийся столицей Италии.\\nReturn JSON with a variants array of objects containing question and transformation_type. Each output must differ from the supplied existing paraphrases, including near-identical wording.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто?\\nNumber of variants: 1\\nExisting paraphrases to avoid: [\\\"Кто именно?\\\"]\\nVariation attempt: 7. Choose a different grammatical subject and reorder the facts without changing them.\"}], \"stream\": false, \"temperature\": 0.7, \"seed\": 42, \"max_tokens\": 1024, \"response_format\": {\"type\": \"json_object\"}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "Кто это такой?",
+     "transformation_type": "lexical"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ },
+ "openai/paraphrase_general": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone paraphrases in the same language as the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Change the wording substantially: move the requested quantity to the beginning, reorder clauses, switch between a question and an instruction, change sentence structure, or use an exactly equivalent mathematical notation where appropriate. Choose natural constructions rather than just replacing one word with a synonym. Do not add facts, solve the task, or copy a previous variant. Examples of allowed changes (illustrations only; do not reuse their facts or wording):\\nOriginal: В коробке 12 красных шаров и 8 синих. Сколько шаров всего?\\nVariants: Сколько всего шаров в коробке, если красных в ней 12, а синих 8? | Коробка содержит 8 синих и 12 красных шаров; найдите общее число шаров.\\nOriginal: Чему равна сумма 18 и произведения 4 на 6?\\nVariants: Вычислите 18 + (4 × 6). | Если к 18 прибавить результат умножения 4 на 6, какое число получится?\\nOriginal: Какой город является столицей Италии?\\nVariants: Назовите столицу Италии. | Укажите город, являющийся столицей Италии.\\nReturn JSON with a variants array of objects containing question and transformation_type. Each output must differ from the supplied existing paraphrases, including near-identical wording.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто?\\nNumber of variants: 1\\nExisting paraphrases to avoid: []\\nVariation attempt: 0. Use a new wording pattern for this attempt.\"}], \"stream\": false, \"temperature\": 0.7, \"seed\": 42, \"max_tokens\": 1024, \"response_format\": {\"type\": \"json_object\"}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "Кто это такой?",
+     "transformation_type": "lexical"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ },
+ "openai/paraphrase_structure": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone, semantically equivalent versions of the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Do not add facts, hints, or a solution. Recast the question in the requested structure. Use a real table, CSV, JSON, or list when requested, including every fact and an explicit request for the answer. The structure is part of the question text, not the response envelope. Return JSON with a variants array of objects containing question and transformation_type. Each variant must differ from previous variants.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто?\\nNumber of variants: 1\\nTransformation mode: structure\\nTarget: JSON\\nExisting paraphrases to avoid: []\\nVariation attempt: 0. Use a new wording pattern for this attempt.\"}], \"stream\": false, \"temperature\": 0.7, \"seed\": 42, \"max_tokens\": 1024, \"response_format\": {\"type\": \"json_object\"}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "{\"request\":\"Who?\"}",
+     "transformation_type": "structure"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ },
+ "openai/paraphrase_style": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone, semantically equivalent versions of the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Do not add facts, hints, or a solution. Rewrite the whole question in the requested register. Change diction and sentence construction substantially while keeping every fact and the requested answer. Do not add a story, explanation, solution, or new assumptions. Return JSON with a variants array of objects containing question and transformation_type. Each variant must differ from previous variants.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто?\\nNumber of variants: 1\\nTransformation mode: style\\nTarget: formal\\nExisting paraphrases to avoid: []\\nVariation attempt: 0. Use a new wording pattern for this attempt.\"}], \"stream\": false, \"temperature\": 0.7, \"seed\": 42, \"max_tokens\": 1024, \"response_format\": {\"type\": \"json_object\"}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "Кто это такой?",
+     "transformation_type": "lexical"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ },
+ "openai/paraphrase_translation": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create standalone, semantically equivalent versions of the original question. Preserve every entity, number, unit, condition, operation order, negation, and the requested answer. Do not add facts, hints, or a solution. Translate the entire question into the requested target language. Use that language for both facts and the final request; preserve names, numbers, units, logical relationships, and answer format. Do not include the original text. Return JSON with a variants array of objects containing question and transformation_type. Each variant must differ from previous variants.\"}, {\"role\": \"user\", \"content\": \"Original question: Кто это?\\nNumber of variants: 1\\nTransformation mode: translation\\nTarget: English\\nExisting paraphrases to avoid: []\\nVariation attempt: 0. Use a new wording pattern for this attempt.\"}], \"stream\": false, \"temperature\": 0.7, \"seed\": 42, \"max_tokens\": 1024, \"response_format\": {\"type\": \"json_object\"}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "invalid_variant_count": 0,
+   "model": "generator",
+   "raw_variant_count": 1,
+   "variants": [
+    {
+     "question": "Кто это такой?",
+     "transformation_type": "lexical"
+    }
+   ]
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ },
+ "openai/questions": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create unambiguous questions that each require one short final answer. Write questions in the same language as the topic. For mathematical expressions, use explicit parentheses whenever operation order could be ambiguous. Make the new questions distinct from the supplied existing questions, including their problem types and solution patterns; changing only numbers or names is not enough. Also vary the questions within the new batch. Return JSON with a questions array of objects containing question and topic. These are synthetic tasks; do not claim they came from a real dataset.\"}, {\"role\": \"user\", \"content\": \"Topic: математика\\nNumber of questions: 1\\nExisting questions to avoid: []\"}], \"stream\": false, \"temperature\": 0.7, \"seed\": 42, \"max_tokens\": 1024, \"response_format\": {\"type\": \"json_object\"}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "model": "generator",
+   "questions": [
+    {
+     "question": "Сколько граней у куба?",
+     "topic": "математика"
+    }
+   ],
+   "source": "synthetic"
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ },
+ "openai/questions_existing": {
+  "body": "{\"model\": \"generator\", \"messages\": [{\"role\": \"system\", \"content\": \"Create unambiguous questions that each require one short final answer. Write questions in the same language as the topic. For mathematical expressions, use explicit parentheses whenever operation order could be ambiguous. Make the new questions distinct from the supplied existing questions, including their problem types and solution patterns; changing only numbers or names is not enough. Also vary the questions within the new batch. Return JSON with a questions array of objects containing question and topic. These are synthetic tasks; do not claim they came from a real dataset.\"}, {\"role\": \"user\", \"content\": \"Topic: математика\\nNumber of questions: 1\\nExisting questions to avoid: [\\\"Сколько будет 2 + 2?\\\"]\"}], \"stream\": false, \"temperature\": 0.7, \"seed\": 42, \"max_tokens\": 1024, \"response_format\": {\"type\": \"json_object\"}}",
+  "headers": [
+   [
+    "Content-type",
+    "application/json"
+   ]
+  ],
+  "result": {
+   "model": "generator",
+   "questions": [
+    {
+     "question": "Сколько граней у куба?",
+     "topic": "математика"
+    }
+   ],
+   "source": "synthetic"
+  },
+  "timeout": 120.0,
+  "url": "http://localhost:9090/v1/chat/completions"
+ }
+}
