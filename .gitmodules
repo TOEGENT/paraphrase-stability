@@ -1,0 +1,3 @@
+[submodule "datasets/mathematics_dataset"]
+	path = datasets/mathematics_dataset
+	url = https://github.com/google-deepmind/mathematics_dataset.git
