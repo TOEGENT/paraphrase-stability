@@ -3,6 +3,14 @@ import hashlib
 from pathlib import Path
 from utils import k_over_n_generator
 
+"""
+Задача
+    Принять от llm_responce_generator
+        yield prompt, anchor, answer
+    И в реальном времени записать prompt,anchor,answer в jsonl
+
+"""
+
 def save_results_to_jsonl(llm_iterator, output_path: Path):
     """
     Сохраняет результаты в JSONL, а хеши — в отдельный .hashes файл.
@@ -20,7 +28,6 @@ def save_results_to_jsonl(llm_iterator, output_path: Path):
     # 2. Открываем JSONL для дописывания
     with open(output_path, 'a', encoding='utf-8') as f_json, \
          open(hash_path, 'a', encoding='utf-8') as f_hash:
-        
         for prompt, k, N in k_over_n_generator.k_over_n_generator(llm_iterator):
             current_hash = hashlib.md5(prompt.encode('utf-8')).hexdigest()
             
@@ -41,5 +48,4 @@ def save_results_to_jsonl(llm_iterator, output_path: Path):
             # Пишем хеш в метаданные
             f_hash.write(current_hash + '\n')
             f_hash.flush()
-            
             existing_hashes.add(current_hash)
