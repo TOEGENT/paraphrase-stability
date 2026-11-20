@@ -1,7 +1,9 @@
 """
 Задача:
-    Взять llm_responce_generator как вход
-    На выходе дать prompt,anchor,k,N
+    Принять от llm_responce_generator
+        yield prompt, anchor, answer 
+    На выходе дать 
+        yield prompt,anchor,k,N
 """
 
 def k_over_n_generator(llm_iterator):
