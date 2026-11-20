@@ -16,18 +16,18 @@ def make_dataset_pipeline(input_path: Path, output_dir: Path):
             f"Файл {input_path} уже существует! "
             "Удалите его вручную, если хотите перегенерировать датасет."
         )
-    else:
-        df_raw = pd.read_parquet(input_path)
 
+    raw_jsonl_path = output_dir / "raw_stability.jsonl"
+    raw_parquet_path = output_dir / "raw_stability.parquet"
+    raw_hash_path = raw_jsonl_path.with_suffix('.hashes')
+    
 
-    input_iter = generate_llm_inputs.generate_llm_inputs(df_raw)
+    input_iter = generate_llm_inputs.generate_llm_inputs(input_path,raw_hash_path)
     llm_iter = llm_response_generator.llm_response_generator(input_iter)
 
-    raw_json_path = output_dir / "raw_stability.jsonl"
-    raw_parquet_path = output_dir / "raw_stability.parquet"
 
-    save_results_to_jsonl.save_results_to_jsonl(llm_iter, raw_json_path)
-    convert_jsonl_to_parquet.convert_jsonl_to_parquet(raw_json_path,raw_parquet_path)
+    save_results_to_jsonl.save_results_to_jsonl(llm_iter, raw_jsonl_path)
+    convert_jsonl_to_parquet.convert_jsonl_to_parquet(raw_jsonl_path,raw_parquet_path)
     split_dataset.split_dataset(str(raw_parquet_path), str(output_dir))
     
     
