@@ -21,7 +21,8 @@ dependencies = [
   "sentence-transformers>=3.0",
   "pandas",
   "dotenv",
-  "requests"
+  "requests",
+  "pyarrow",
 ]
 
 [tool.setuptools]
