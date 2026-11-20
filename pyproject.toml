@@ -19,6 +19,9 @@ dependencies = [
   "sympy>=1.2",
   "torch>=2.2",
   "sentence-transformers>=3.0",
+  "pandas",
+  "dotenv",
+  "requests"
 ]
 
 [tool.setuptools]
