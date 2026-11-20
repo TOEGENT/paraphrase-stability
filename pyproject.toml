@@ -13,7 +13,10 @@ authors = [
 ]
 license = { file = "LICENSE" }
 dependencies = [
+  "absl-py>=0.1.0",
   "numpy>=1.26",
+  "six>=1.0",
+  "sympy>=1.2",
   "torch>=2.2",
   "sentence-transformers>=3.0",
 ]
