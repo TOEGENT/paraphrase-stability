@@ -23,6 +23,7 @@ dependencies = [
   "dotenv",
   "requests",
   "pyarrow",
+  "matplotlib"
 ]
 
 [tool.setuptools]
