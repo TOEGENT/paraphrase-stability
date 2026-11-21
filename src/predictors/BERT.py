@@ -5,6 +5,17 @@ from datasets import Dataset
 from pathlib import Path
 import numpy as np
 
+
+"""
+Задача
+    Принять на вход
+        датасет train, val
+    Выдать
+        датасет 
+
+
+"""
+
 def train_bert_finetune(train_path: Path, val_path: Path, output_path: Path):
     # 1. Загрузка данных
     train_df = pd.read_parquet(train_path)
