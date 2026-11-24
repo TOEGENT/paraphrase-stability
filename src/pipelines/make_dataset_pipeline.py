@@ -87,28 +87,28 @@ from utils import (
 )
 
 
-def make_dataset_pipeline(input_path: Path, output_dir: Path):
-    if (Path(output_dir) / Path("raw_stability.parquet")).exists():
+def make_dataset_pipeline(input_path: Path, output_dir: Path,label_map:dict):
+    if input_path.exists():
         raise FileExistsError(
             f"Файл {input_path} уже существует! "
             "Удалите его вручную, если хотите перегенерировать датасет."
         )
 
-    raw_jsonl_path = output_dir / "raw_stability.jsonl"
-    raw_parquet_path = output_dir / "raw_stability.parquet"
+    raw_jsonl_path = output_dir / f"{config.DATASET_OUTPUT_NAME}.jsonl"
+    raw_parquet_path = output_dir / f"{config.DATASET_OUTPUT_NAME}.parquet"
     raw_hash_path = raw_jsonl_path.with_suffix('.hashes')
     
 
     input_iter = s1_pair_generator.s1_pair_generator(input_path,raw_hash_path) # (1)
-    llm_iter = s2_llm_responce_generator.s2_llm_response_generator(input_iter) # (2)
+    llm_iter = s2_llm_responce_generator.s2_llm_response_generator(input_iter,label_map) # (2)
 
-
-    s3_save_results_to_jsonl.s3_save_results_to_jsonl(llm_iter, raw_jsonl_path) # (3.1) (3.2)
-    
-    convert_jsonl_to_parquet.convert_jsonl_to_parquet(raw_jsonl_path,raw_parquet_path) # (4)    
+    try:
+        s3_save_results_to_jsonl.s3_save_results_to_jsonl(llm_iter, raw_jsonl_path) # (3.1) (3.2)
+    finally:
+        convert_jsonl_to_parquet.convert_jsonl_to_parquet(raw_jsonl_path,raw_parquet_path) # (4)    
     
 if __name__ == "__main__":
     input_file = config.LYR_TRAIN_PATH
-    output_folder = config.DATASETS_OUT_DIR / "LYR"
-
-    make_dataset_pipeline(input_file, output_folder)
+    output_dir = config.DATASETS_OUT_DIR / "LYR"
+    label_map = config.LYR_LABEL_MAP
+    make_dataset_pipeline(input_file, output_dir,label_map)
