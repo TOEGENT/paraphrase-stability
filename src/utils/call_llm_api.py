@@ -17,7 +17,7 @@ def call_llm_api(prompt: str) -> str:
         "model": MODEL,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
-        "max_tokens": 10,
+        "max_tokens": 5,
         "logprobs": True, 
         "top_logprobs": 1,    
         "chat_template_kwargs": {
