@@ -1,20 +1,18 @@
-from utils import call_llm_api
-
 """
 Задача 2
     Взять результаты s1_pair_generator
-        yield якорный вопрос, все комбинации few_shot вопросов
+        yield якорный вопрос,ответ на якорь, все комбинации few_shot вопросов
             yield ->
-                    ( "A", (
+                    ( "A",1, (
                             (("B",0),("C",0),("D",1),("E",1)),
                             (("C",0),("B",0),("D",1),("E",1))
                             (("C",0),("D",1),("B",0),("E",1)),
                             ... так 4! или 24 раза
                             ) )
             yield ->
-                ( "F", (аналогично только для G,H,I,J) )
+                ( "F",0, (аналогично только для G,H,I,J) )
     И выдать 
-        yield prompt, anchor, answer
+        yield prompt, anchor,anchor_answer, answer
             yield -> 
                 prompt
                     'Examples: 
@@ -26,6 +24,8 @@ from utils import call_llm_api
                         "A": ?',
                 anchor
                     "A"
+                anchor_answer
+                    1
                 answer
                     1
             yield -> 
@@ -39,19 +39,21 @@ from utils import call_llm_api
                         "A": ?',
                 anchor
                     "A"
+                anchor_answer
+                    1
                 answer
                     1
             ...
     Решение
-        Для каждого якоря и его few_shots (1)
-            "A", (
+        Для каждого якоря, его ответа и его few_shots (1)
+            "A", 1, (
                 (("B",0),("C",0),("D",1),("E",1)),
                 (("C",0),("B",0),("D",1),("E",1))
                 (("C",0),("D",1),("B",0),("E",1)),
                 ... так 4! или 24 раза
                 ) 
             
-                for anchor, examples in input_iterator:
+                for anchor,anchor_answer, examples in input_iterator:
                 
         Формируем блок примеров (2)
             'Examples: 
@@ -62,7 +64,7 @@ from utils import call_llm_api
 
                 examples_block = ""
                 for ex_text, ex_label in examples:
-                    label_name = get_label_name(ex_label)
+                    label_name = label_map[ex_label]
                     examples_block += f"Text: '{ex_text}'\nLabel: {label_name}\n\n"
         
         Формируем вопрос (3)
@@ -77,35 +79,34 @@ from utils import call_llm_api
         Передаём примеры + вопрос в ллм (4)
             answer = call_llm_api.call_llm_api(prompt)
 
-        выбрасываем промпт, якорь, ответ ллм
-            yield prompt, anchor, answer
+        выбрасываем промпт, якорь, ответ на якорь, ответ ллм
+            yield prompt, anchor,anchor_answer, answer
 """
-LABEL_MAP = {
-    0: "Negative", 1: "Positive", 
-}
+from utils import call_llm_api
 
-def get_label_name(label_id):
-    return LABEL_MAP.get(label_id, str(label_id))
-
-def s2_llm_response_generator(input_iterator):
+def s2_llm_response_generator(input_iterator,label_map):
     """
-    Вход: Генератор пар (anchor_text, examples_list)
-    Выход: Генератор триплетов (prompt, anchor_text, llm_answer)
+    input
+        yield anchor_text, anchor_answer, list(few_shot_perm)
+    
+    output
+        yield prompt, anchor, anchor_answer, answer    
+
     """
     print("llm_response_generator started")
 
     #(1)
-    for anchor, examples in input_iterator:
+    for anchor,anchor_answer, examples in input_iterator:
 
         # (2)
         examples_block = ""
-        for ex_text, ex_label in examples:
-            label_name = get_label_name(ex_label)
+        for ex_text,ex_label in examples:
+            label_name = label_map[ex_label]
             examples_block += f"Text: '{ex_text}'\nLabel: {label_name}\n\n"
             
         # (3)
         prompt = (
-            f"You are an emotion classifier. Analyze the text and return ONLY the label name.\n\n"
+            f"you're a classificator. return ONLY the label\n"
             f"Here are some examples:\n{examples_block}\n"
             f"Now analyze this text:\nText: '{anchor}'\nLabel:"
         )
@@ -114,4 +115,4 @@ def s2_llm_response_generator(input_iterator):
         answer = call_llm_api.call_llm_api(prompt)
         
         #(5) 
-        yield prompt, anchor, answer
+        yield prompt, anchor,anchor_answer,answer
