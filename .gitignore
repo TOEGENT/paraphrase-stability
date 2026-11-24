@@ -1,4 +1,6 @@
 .jsonl
+.parquet
+.hashes
 # Python cache and build
 __pycache__/
 *.py[cod]

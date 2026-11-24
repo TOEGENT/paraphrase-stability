@@ -34,7 +34,7 @@ def train_predict(train_path: Path, val_path: Path):
     model.fit(X_train_scaled, y_train)
     
     # 5. Предсказание
-    train_preds = model.predict(X_train)
-    val_preds = model.predict(X_val)
+    train_preds = model.predict(X_train_scaled)
+    val_preds = model.predict(X_val_scaled)
 
     return pd.DataFrame({"prediction": train_preds}), pd.DataFrame({"prediction": val_preds})
