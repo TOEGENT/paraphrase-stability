@@ -12,3 +12,5 @@ def make_dataset_analysis_pipeline(dataset_json_path):
 
 if __name__ == "__main__":
     make_dataset_analysis_pipeline(config.LYR_JSONL_PATH)
+    make_dataset_analysis_pipeline(config.AG_NEWS_JSONL_PATH)
+    make_dataset_analysis_pipeline(config.CARER_JSONL_PATH)
