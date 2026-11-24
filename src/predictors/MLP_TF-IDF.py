@@ -5,7 +5,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import StandardScaler
 from pathlib import Path
 
-def train_mlp_tfidf(train_path: Path, val_path: Path, output_path: Path):
+def train_predict(train_path: Path, val_path: Path):
     # 1. Загрузка
     train_df = pd.read_parquet(train_path)
     val_df = pd.read_parquet(val_path)
@@ -34,9 +34,7 @@ def train_mlp_tfidf(train_path: Path, val_path: Path, output_path: Path):
     model.fit(X_train_scaled, y_train)
     
     # 5. Предсказание
-    preds = model.predict(X_val_scaled)
-    
-    # 6. Сохранение
-    val_df["prediction"] = preds
-    val_df.to_parquet(output_path, index=False)
-    print(f"MLP (TF-IDF) trained. Score: {model.score(X_val_scaled, val_df['k_over_N'].values):.4f}")
+    train_preds = model.predict(X_train)
+    val_preds = model.predict(X_val)
+
+    return pd.DataFrame({"prediction": train_preds}), pd.DataFrame({"prediction": val_preds})

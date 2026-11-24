@@ -16,14 +16,23 @@ import numpy as np
 
 """
 
-def train_bert_finetune(train_path: Path, val_path: Path, output_path: Path):
+def train_predict(train_path: Path, val_path: Path):
     # 1. Загрузка данных
     train_df = pd.read_parquet(train_path)
     val_df = pd.read_parquet(val_path)
     
     # Превращаем в формат HuggingFace Dataset
-    train_dataset = Dataset.from_pandas(train_df[['prompt', 'k_over_N']])
-    val_dataset = Dataset.from_pandas(val_df[['prompt', 'k_over_N']])
+    train_dataset = Dataset.from_pandas(
+        train_df[['prompt', 'k_over_N']].rename(
+            columns={'k_over_N': 'labels'}
+        )
+    )
+
+    val_dataset = Dataset.from_pandas(
+        val_df[['prompt', 'k_over_N']].rename(
+            columns={'k_over_N': 'labels'}
+        )
+    )
     
     # 2. Токенизация
     model_name = "distilbert-base-uncased" # Берем легкую версию для скорости
@@ -41,7 +50,7 @@ def train_bert_finetune(train_path: Path, val_path: Path, output_path: Path):
     # 4. Настройка обучения
     training_args = TrainingArguments(
         output_dir="./bert_results",
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         learning_rate=2e-5,
         per_device_train_batch_size=8,
         per_device_eval_batch_size=8,
@@ -69,14 +78,12 @@ def train_bert_finetune(train_path: Path, val_path: Path, output_path: Path):
     trainer.train()
     
     # 6. Предсказание на валидации
-    predictions = trainer.predict(val_tokenized)
-    preds = predictions.predictions.flatten()
     
-    # 7. Сохранение
-    val_df["prediction"] = preds
-    val_df.to_parquet(output_path, index=False)
-    print(f"BERT Fine-tuned. MAE: {predictions.metrics['test_mae']:.4f}")
+    train_output = trainer.predict(train_tokenized)
+    val_output = trainer.predict(val_tokenized)
+    
+    train_preds = train_output.predictions.flatten()
+    val_preds = val_output.predictions.flatten()
 
-if __name__ == "__main__":
-    train_bert_finetune(Path("src\\datasets_out_split\\ag_news\\train.parquet"),
-                        Path("src\\datasets_out_split\\ag_news\\val.parquet"))
+    return pd.DataFrame({"prediction": train_preds}), pd.DataFrame({"prediction": val_preds})
+

@@ -15,7 +15,7 @@ from sklearn.dummy import DummyRegressor
 from sklearn.feature_extraction.text import TfidfVectorizer
 from pathlib import Path
 
-def train_dummy_standardized(train_path: Path, val_path: Path, output_path: Path):
+def train_predict(train_path: Path, val_path: Path):
     # 1. Загрузка
     train_df = pd.read_parquet(train_path)
     val_df = pd.read_parquet(val_path)
@@ -34,11 +34,9 @@ def train_dummy_standardized(train_path: Path, val_path: Path, output_path: Path
     model.fit(X_train, y_train)
     
     # 4. Предсказание
-    preds = model.predict(X_val)
-    
-    # 5. Сохранение
-    val_df["prediction"] = preds
-    val_df.to_parquet(output_path, index=False)
+    train_preds = model.predict(X_train)
+    val_preds = model.predict(X_val)
+    return pd.DataFrame({"prediction": train_preds}), pd.DataFrame({"prediction": val_preds})
 
 if __name__ == "__main__":
     train_dummy_standardized(Path("train.parquet"), Path("val.parquet"), Path("val_dummy_pred.parquet"))
