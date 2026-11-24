@@ -76,3 +76,7 @@ def train_bert_finetune(train_path: Path, val_path: Path, output_path: Path):
     val_df["prediction"] = preds
     val_df.to_parquet(output_path, index=False)
     print(f"BERT Fine-tuned. MAE: {predictions.metrics['test_mae']:.4f}")
+
+if __name__ == "__main__":
+    train_bert_finetune(Path("src\\datasets_out_split\\ag_news\\train.parquet"),
+                        Path("src\\datasets_out_split\\ag_news\\val.parquet"))
