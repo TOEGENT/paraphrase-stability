@@ -4,7 +4,7 @@ from sklearn.neural_network import MLPRegressor
 from sentence_transformers import SentenceTransformer
 from pathlib import Path
 
-def train_mlp_embeddings(train_path: Path, val_path: Path, output_path: Path):
+def train_predict(train_path: Path, val_path: Path):
     # 1. Загрузка модели эмбеддингов (легкая и быстрая)
     print("Loading embedding model...")
     model_emb = SentenceTransformer('all-MiniLM-L6-v2')
@@ -23,7 +23,7 @@ def train_mlp_embeddings(train_path: Path, val_path: Path, output_path: Path):
     
     # 4. Обучение MLP
     # Эмбеддинги уже нормализованы, scaler можно не использовать, но с ним иногда лучше
-    model_mlp = MLPRegressor(
+    model = MLPRegressor(
         hidden_layer_sizes=(256, 128), # Нейросеть побольше, так как признаков 384
         activation='relu',
         solver='adam',
@@ -34,14 +34,10 @@ def train_mlp_embeddings(train_path: Path, val_path: Path, output_path: Path):
     )
     
     print("Training MLP...")
-    model_mlp.fit(X_train, y_train)
+    model.fit(X_train, y_train)
     
     # 5. Предсказание
-    preds = model_mlp.predict(X_val)
-    
-    # 6. Сохранение
-    val_df["prediction"] = preds
-    val_df.to_parquet(output_path, index=False)
-    
-    score = model_mlp.score(X_val, val_df["k_over_N"].values)
-    print(f"MLP (Embeddings) trained. R^2 on Val: {score:.4f}")
+    train_preds = model.predict(X_train)
+    val_preds = model.predict(X_val)
+
+    return pd.DataFrame({"prediction": train_preds}), pd.DataFrame({"prediction": val_preds})
