@@ -10,16 +10,16 @@
                 "E"    :    1
                     ...
         Выдать 
-            yield якорный вопрос, все комбинации few_shot вопросов
+            yield якорный вопрос,якорный ответ, все комбинации few_shot вопросов
                 yield ->
-                        ( "A", (
+                        ( "A",1, (
                                 (("A",1),("B",0),("C",0),("D",1),("E",1)),
                                 (("B",0),("A",1),("C",0),("D",1),("E",1))
                                 (("A",1),("C",0),("B",0),("D",1),("E",1)),
                                 ... так 4! или 24 раза
                                 ) )
                 yield ->
-                    ( "F", (аналогично только для G,H,I,J) )
+                    ( "F",0, (аналогично только для G,H,I,J) )
 
     Решение
         Исходный датасет:
@@ -55,6 +55,7 @@
             Запоминаем первый отзыв как якорный (не сохраняем инфу о оценке чтобы ИИ потом сам ответил на якорь) (2.1)
                 anchor_text = "A"
                 anchor_text = group.iloc[0]["text"]
+                anchor_answer = group.iloc[0]["label"]
             Остальные как few_shot (сохраняя инфу о оценке для примера) (2.2)
                 others_data = ("B",0),("C",0),("D",1),("E",1)
                 others_data = list(zip(others["text"], others["label"]))
@@ -69,9 +70,9 @@
 
                     for perm in permutations(others_data): 
                 
-            Возвращаем якорь + конкретную перестановку few_shot (3.2)
-                "A", (("B",0),("C",0),("D",1),("E",1))
-                    yield anchor_text, list(perm)
+            Возвращаем якорь + ответ на якорь + конкретную перестановку few_shot (3.2)
+                "A",1, (("B",0),("C",0),("D",1),("E",1))
+                    yield anchor_text,anchor_answer, list(perm)
 """
 
 from itertools import permutations
@@ -80,6 +81,14 @@ import hashlib
 from pathlib import Path
 
 def s1_pair_generator(parquet_path:Path, hashes_path: Path):
+    """
+    input
+        parquet_path
+        hashes_path
+
+    output
+        yield anchor_text, anchor_answer, list(few_shot_perm)
+    """
 
     df = pd.read_parquet(parquet_path)
 
@@ -100,6 +109,7 @@ def s1_pair_generator(parquet_path:Path, hashes_path: Path):
         group = df.iloc[i:i+5] #(1.2)
         
         anchor_text = group.iloc[0]["text"] #(2.1)
+        acnhor_answer = group.iloc[0]["label"]
 
         #hash logic start
         anchor_hash = hashlib.md5(anchor_text.encode('utf-8')).hexdigest() 
@@ -113,4 +123,4 @@ def s1_pair_generator(parquet_path:Path, hashes_path: Path):
         others_data = list(zip(others["text"], others["label"]))
         
         for perm in permutations(others_data): #(3.1)
-            yield anchor_text, list(perm) #(3.2)
+            yield anchor_text,acnhor_answer, list(perm) #(3.2)
