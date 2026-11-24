@@ -4,7 +4,7 @@ from xgboost import XGBRegressor
 from sentence_transformers import SentenceTransformer
 from pathlib import Path
 
-def train_xgboost_embeddings(train_path: Path, val_path: Path, output_path: Path):
+def train_predict(train_path: Path, val_path: Path):
     # 1. Загрузка модели эмбеддингов
     print("Loading embedding model...")
     model_emb = SentenceTransformer('all-MiniLM-L6-v2')
@@ -40,10 +40,7 @@ def train_xgboost_embeddings(train_path: Path, val_path: Path, output_path: Path
     )
     
     # 5. Предсказание
-    preds = model.predict(X_val)
-    
-    # 6. Сохранение
-    val_df["prediction"] = preds
-    val_df.to_parquet(output_path, index=False)
-    
-    print(f"XGBoost trained. Best MAE: {model.best_score}")
+    train_preds = model.predict(X_train)
+    val_preds = model.predict(X_val)
+
+    return pd.DataFrame({"prediction": train_preds}), pd.DataFrame({"prediction": val_preds})
