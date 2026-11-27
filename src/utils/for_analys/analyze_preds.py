@@ -2,7 +2,7 @@ from pathlib import Path
 import json
 import matplotlib.pyplot as plt
 
-from utils.for_analys import calculate_metrics, build_diagnostics
+from utils.for_analys import calculate_binary_metrics, build_binary_diagnositcs
 
 
 def analyze_preds(
@@ -18,13 +18,13 @@ def analyze_preds(
     metadata_dir.mkdir(parents=True, exist_ok=True)
 
     # Calculate metrics
-    metrics = calculate_metrics.calculate_metrics(y_data_path, pred_data_path)
+    metrics = calculate_binary_metrics.calculate_binary_metrics(y_data_path, pred_data_path)
 
     with open(metadata_dir / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=4)
 
     # Build diagnostics
-    diag = build_diagnostics.build_diagnostics(y_data_path, pred_data_path)
+    diag = build_binary_diagnositcs.build_binary_diagnostics(y_data_path, pred_data_path)
 
     diag.savefig(
         metadata_dir / "diag.png",
