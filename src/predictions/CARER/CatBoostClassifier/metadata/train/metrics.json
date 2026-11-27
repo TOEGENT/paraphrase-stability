@@ -1,0 +1,22 @@
+{
+    "roc_auc": 0.931522586860778,
+    "accuracy": 0.8046875,
+    "f1_class0": 0.837000814995925,
+    "precision_class0": 0.7431259044862518,
+    "recall_class0": 0.9580223880597015,
+    "f1_class1": 0.756394640682095,
+    "precision_class1": 0.9324324324324325,
+    "recall_class1": 0.6362704918032787,
+    "positive_rate_pred": 0.3251953125,
+    "positive_rate_true": 0.4765625,
+    "confusion_matrix": [
+        [
+            1027,
+            45
+        ],
+        [
+            355,
+            621
+        ]
+    ]
+}
