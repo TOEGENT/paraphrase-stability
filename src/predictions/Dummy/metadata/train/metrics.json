@@ -1,8 +1,22 @@
 {
-    "mae": 0.2258339195250423,
-    "mse": 0.07430336279128497,
-    "rmse": 0.2725864317813434,
-    "bias": -1.0749375229526052e-16,
-    "r2": 0.0,
-    "pearson": -2.944143055088907e-16
+    "roc_auc": 0.5,
+    "accuracy": 0.5522501906941266,
+    "f1_class0": 0.7115479115479115,
+    "precision_class0": 0.5522501906941266,
+    "recall_class0": 1.0,
+    "f1_class1": 0.0,
+    "precision_class1": 0.0,
+    "recall_class1": 0.0,
+    "positive_rate_pred": 0.0,
+    "positive_rate_true": 0.4477498093058734,
+    "confusion_matrix": [
+        [
+            2172,
+            0
+        ],
+        [
+            1761,
+            0
+        ]
+    ]
 }
